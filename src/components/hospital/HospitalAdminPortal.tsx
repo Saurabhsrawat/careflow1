@@ -25,7 +25,11 @@ import {
   LogOut,
   Database,
   RotateCcw,
-  Check
+  Check,
+  Menu,
+  X,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 
 interface HospitalAdminPortalProps {
@@ -36,12 +40,27 @@ interface HospitalAdminPortalProps {
 
 export type AdminTab = 'dashboard' | 'doctors' | 'patients' | 'appointments' | 'settings' | 'security';
 
+interface NavItem {
+  id: AdminTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge: string | null;
+  isSpecial?: boolean;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
 export const HospitalAdminPortal: React.FC<HospitalAdminPortalProps> = ({
   user,
   token,
   onLogout
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [collapsed, setCollapsed] = useState<boolean>(false);
   
   // Data State
   const [dashboardData, setDashboardData] = useState<HospitalAdminDashboardStats | null>(null);
@@ -133,224 +152,288 @@ export const HospitalAdminPortal: React.FC<HospitalAdminPortalProps> = ({
   const hospitalName = dashboardData?.hospital?.name || 'St. Jude Medical Center';
   const hospitalId = dashboardData?.hospital?.id || user.hospital_id || 'hosp-stjude';
 
+  const handleSelectTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+  };
+
+  const navGroups: NavGroup[] = [
+    {
+      title: 'Facility Operations',
+      items: [
+        { id: 'dashboard', label: 'Operations Dashboard', icon: LayoutDashboard, badge: null },
+        { id: 'doctors', label: 'Manage Doctors', icon: Stethoscope, badge: `${doctors.length}` },
+        { id: 'patients', label: 'Manage Patients', icon: Users, badge: `${patients.length}` },
+        { id: 'appointments', label: 'Appointment Oversight', icon: Calendar, badge: `${appointments.length}` },
+      ]
+    },
+    {
+      title: 'Administration & Security',
+      items: [
+        { id: 'security', label: 'Isolation Audit Suite', icon: ShieldCheck, badge: 'HIPAA', isSpecial: true },
+        { id: 'settings', label: 'Hospital Settings', icon: Settings, badge: null },
+      ]
+    }
+  ];
+
+  const allItems: NavItem[] = navGroups.flatMap(g => g.items);
+  const activeItem: NavItem = allItems.find(item => item.id === activeTab) || allItems[0];
+  const ActiveIcon = activeItem.icon;
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
-      {/* Top Application Bar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Brand & Facility Info */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-xs">
-                <Building2 className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-base text-slate-900 tracking-tight">CareFlow</span>
-                  <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 text-[10px] font-bold rounded-full uppercase tracking-wider">
-                    Hospital Admin
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      
+      {/* Mobile Top Navigation & Active View Header */}
+      <div className="lg:hidden mb-4 bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
+            <ActiveIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Hospital Admin</div>
+            <div className="text-sm font-bold text-slate-900">{activeItem.label}</div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+        >
+          {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          <span>{mobileMenuOpen ? 'Close Menu' : 'Browse Sections'}</span>
+        </button>
+      </div>
+
+      {/* Main Single-Page-App Layout Container */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        
+        {/* Persistent Left Sidebar */}
+        <aside 
+          className={`w-full shrink-0 transition-all duration-200 space-y-4 ${
+            mobileMenuOpen ? 'block' : 'hidden lg:block'
+          } ${collapsed ? 'lg:w-20' : 'lg:w-64 xl:w-72'}`}
+        >
+          
+          {/* Admin & Facility Profile Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3 relative">
+            <div className="flex items-center justify-between">
+              {!collapsed ? (
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-base shadow-sm shrink-0">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h2 className="text-sm font-bold text-slate-900 truncate">{user.name}</h2>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                        Director
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-indigo-700 font-semibold mt-0.5 truncate">
+                      {hospitalName}
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                      Facility: {hospitalId}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full flex flex-col items-center gap-1.5 py-1">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm" title={`${user.name} - ${hospitalName}`}>
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <span className="text-[9px] font-bold px-1 py-0.2 rounded-full bg-indigo-100 text-indigo-800">
+                    Admin
                   </span>
                 </div>
-                <div className="text-xs text-slate-500 font-medium">
-                  {hospitalName}
-                </div>
-              </div>
+              )}
+
+              {/* Sidebar Collapse/Expand Button (Desktop) */}
+              <button
+                type="button"
+                onClick={() => setCollapsed(!collapsed)}
+                className="hidden lg:flex p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition items-center justify-center cursor-pointer ml-auto"
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar to icon-only mode"}
+              >
+                {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+              </button>
             </div>
 
-            {/* Quick Actions & User Profile */}
-            <div className="flex items-center gap-3">
-              {/* Reset Database Button */}
-              <button
-                onClick={handleResetDatabase}
-                disabled={isResetting}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition"
-                title="Reset database to initial seed state"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-                <span>{resetSuccess ? 'Reset Done!' : 'Reset Demo DB'}</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('security')}
-                className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200/80 transition"
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Isolation Verified</span>
-              </button>
-
-              {/* Admin Profile */}
-              <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
-                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs">
-                  {user.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                </div>
-                <div className="hidden lg:block text-left">
-                  <div className="text-xs font-bold text-slate-800 leading-tight">{user.name}</div>
-                  <div className="text-[10px] text-slate-400">Hospital Director</div>
-                </div>
-
+            {/* Quick Reset & Audit Buttons */}
+            {!collapsed ? (
+              <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
                 <button
-                  onClick={onLogout}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition ml-1"
-                  title="Sign Out"
+                  onClick={handleResetDatabase}
+                  disabled={isResetting}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer disabled:opacity-50"
+                  title="Reset database to clean initial seed data"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+                  <span>{resetSuccess ? 'Reset Done!' : 'Reset Demo Database'}</span>
                 </button>
               </div>
-            </div>
+            ) : (
+              <div className="pt-1 border-t border-slate-100 flex flex-col items-center">
+                <button
+                  onClick={handleResetDatabase}
+                  disabled={isResetting}
+                  title="Reset Demo DB"
+                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                >
+                  <RotateCcw className={`w-4 h-4 ${isResetting ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Navigation Tabs Bar */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-1 sm:space-x-4 overflow-x-auto no-scrollbar py-1">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'dashboard'
-                  ? 'bg-indigo-50 text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Operations Dashboard</span>
-            </button>
+          {/* Navigation Items List */}
+          <nav className="bg-white rounded-2xl border border-slate-200 shadow-xs p-2 space-y-3">
+            {navGroups.map((group, groupIdx) => (
+              <div key={groupIdx} className="space-y-1">
+                {!collapsed ? (
+                  <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    {group.title}
+                  </div>
+                ) : (
+                  groupIdx > 0 && <div className="border-t border-slate-100 my-2" />
+                )}
+                
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
 
-            <button
-              onClick={() => setActiveTab('doctors')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'doctors'
-                  ? 'bg-indigo-50 text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Stethoscope className="w-4 h-4" />
-              <span>Doctors ({doctors.length})</span>
-            </button>
+                    return (
+                      <button
+                        key={item.id}
+                        id={`hospital-sidebar-item-${item.id}`}
+                        onClick={() => handleSelectTab(item.id)}
+                        title={item.label}
+                        className={`w-full flex items-center ${
+                          collapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2'
+                        } rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                          isActive
+                            ? item.isSpecial
+                              ? 'bg-emerald-600 text-white font-bold shadow-xs ring-1 ring-emerald-500/30'
+                              : 'bg-indigo-600 text-white font-bold shadow-xs ring-1 ring-indigo-500/30'
+                            : item.isSpecial
+                              ? 'text-emerald-700 hover:bg-emerald-50'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="relative shrink-0">
+                            <Icon className={`w-4 h-4 ${
+                              isActive 
+                                ? 'text-white' 
+                                : item.isSpecial 
+                                  ? 'text-emerald-600' 
+                                  : 'text-slate-500'
+                            }`} />
+                            {collapsed && item.badge && (
+                              <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-indigo-400 ring-1 ring-white" />
+                            )}
+                          </div>
+                          {!collapsed && <span className="truncate">{item.label}</span>}
+                        </div>
 
-            <button
-              onClick={() => setActiveTab('patients')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'patients'
-                  ? 'bg-indigo-50 text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Patients ({patients.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('appointments')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'appointments'
-                  ? 'bg-indigo-50 text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Appointments ({appointments.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'settings'
-                  ? 'bg-indigo-50 text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span>Hospital Settings</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('security')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shrink-0 ${
-                activeTab === 'security'
-                  ? 'bg-emerald-100 text-emerald-800 font-extrabold shadow-xs'
-                  : 'text-emerald-700 hover:bg-emerald-50'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Isolation Audit Suite</span>
-            </button>
+                        {!collapsed && item.badge && (
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ml-1 ${
+                              isActive
+                                ? 'bg-white/20 text-white border border-white/20'
+                                : item.isSpecial
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
-        </div>
-      </header>
+        </aside>
 
-      {/* Main Content Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {error && (
-          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600" />
-              <span>{error}</span>
+        {/* Main Content Area: Only ONE Section Visible at a Time */}
+        <main className="flex-1 min-w-0 w-full">
+          {error && (
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                <span>{error}</span>
+              </div>
+              <button 
+                onClick={fetchAllData}
+                className="px-3 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 text-xs font-semibold cursor-pointer"
+              >
+                Retry
+              </button>
             </div>
-            <button 
-              onClick={fetchAllData}
-              className="px-3 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 text-xs font-semibold"
-            >
-              Retry
-            </button>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'dashboard' && (
-          <HospitalDashboard
-            data={dashboardData}
-            loading={loading}
-            onNavigateTab={setActiveTab}
-            onRefresh={fetchAllData}
-          />
-        )}
+          {activeTab === 'dashboard' && (
+            <HospitalDashboard
+              data={dashboardData}
+              loading={loading}
+              onNavigateTab={(tab) => handleSelectTab(tab)}
+              onRefresh={fetchAllData}
+            />
+          )}
 
-        {activeTab === 'doctors' && (
-          <HospitalDoctorsList
-            doctors={doctors}
-            loading={loading}
-            hospitalName={hospitalName}
-            onRefresh={fetchAllData}
-            token={token}
-          />
-        )}
+          {activeTab === 'doctors' && (
+            <HospitalDoctorsList
+              doctors={doctors}
+              loading={loading}
+              hospitalName={hospitalName}
+              onRefresh={fetchAllData}
+              token={token}
+            />
+          )}
 
-        {activeTab === 'patients' && (
-          <HospitalPatientsList
-            patients={patients}
-            doctors={doctors}
-            loading={loading}
-            hospitalName={hospitalName}
-            token={token}
-          />
-        )}
+          {activeTab === 'patients' && (
+            <HospitalPatientsList
+              patients={patients}
+              doctors={doctors}
+              loading={loading}
+              hospitalName={hospitalName}
+              token={token}
+            />
+          )}
 
-        {activeTab === 'appointments' && (
-          <HospitalAppointments
-            appointments={appointments}
-            doctors={doctors}
-            loading={loading}
-            hospitalName={hospitalName}
-            onRefresh={fetchAllData}
-            token={token}
-          />
-        )}
+          {activeTab === 'appointments' && (
+            <HospitalAppointments
+              appointments={appointments}
+              doctors={doctors}
+              loading={loading}
+              hospitalName={hospitalName}
+              onRefresh={fetchAllData}
+              token={token}
+            />
+          )}
 
-        {activeTab === 'settings' && (
-          <HospitalSettings
-            initialHospital={dashboardData?.hospital || null}
-            onRefresh={fetchAllData}
-            token={token}
-          />
-        )}
+          {activeTab === 'settings' && (
+            <HospitalSettings
+              initialHospital={dashboardData?.hospital || null}
+              onRefresh={fetchAllData}
+              token={token}
+            />
+          )}
 
-        {activeTab === 'security' && (
-          <HospitalIsolationTester
-            token={token}
-            hospitalName={hospitalName}
-            hospitalId={hospitalId}
-          />
-        )}
-      </main>
+          {activeTab === 'security' && (
+            <HospitalIsolationTester
+              token={token}
+              hospitalName={hospitalName}
+              hospitalId={hospitalId}
+            />
+          )}
+        </main>
+      </div>
     </div>
   );
 };
+

@@ -67,11 +67,7 @@ export const PlaceholderDashboard: React.FC = () => {
 
   // If doctor, render full Doctor Module
   if (user.role === 'doctor') {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <DoctorPortal />
-      </div>
-    );
+    return <DoctorPortal />;
   }
 
   // If hospital admin, render full Hospital Admin Module
