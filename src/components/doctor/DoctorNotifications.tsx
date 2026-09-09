@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   Bell, 
   CheckCircle2, 
@@ -54,7 +55,7 @@ export const DoctorNotifications: React.FC<DoctorNotificationsProps> = ({
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/doctor/notifications');
+      const res = await authFetch('/api/doctor/notifications');
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications || []);
@@ -77,7 +78,7 @@ export const DoctorNotifications: React.FC<DoctorNotificationsProps> = ({
         prev.map(n => (n.id === id ? { ...n, is_read: nextRead ? 1 : 0 } : n))
       );
 
-      await fetch(`/api/doctor/notifications/${id}/read`, {
+      await authFetch(`/api/doctor/notifications/${id}/read`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_read: nextRead })
@@ -92,7 +93,7 @@ export const DoctorNotifications: React.FC<DoctorNotificationsProps> = ({
   const handleMarkAllRead = async () => {
     try {
       setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
-      await fetch('/api/doctor/notifications/mark-all-read', { method: 'POST' });
+      await authFetch('/api/doctor/notifications/mark-all-read', { method: 'POST' });
       if (onRefreshBadge) onRefreshBadge();
     } catch (err) {
       console.error('Failed to mark all as read:', err);
@@ -102,7 +103,7 @@ export const DoctorNotifications: React.FC<DoctorNotificationsProps> = ({
   const handleDeleteNotification = async (id: string) => {
     try {
       setNotifications(prev => prev.filter(n => n.id !== id));
-      await fetch(`/api/doctor/notifications/${id}`, { method: 'DELETE' });
+      await authFetch(`/api/doctor/notifications/${id}`, { method: 'DELETE' });
       if (onRefreshBadge) onRefreshBadge();
     } catch (err) {
       console.error('Failed to delete notification:', err);

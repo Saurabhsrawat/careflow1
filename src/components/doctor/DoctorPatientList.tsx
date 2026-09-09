@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   Users, 
   Search, 
@@ -34,7 +35,7 @@ export const DoctorPatientList: React.FC<PatientListProps> = ({ onSelectPatient 
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/doctor/patients');
+      const res = await authFetch('/api/doctor/patients');
       if (res.ok) {
         const data = await res.json();
         setPatients(data.patients || []);
@@ -190,12 +191,22 @@ export const DoctorPatientList: React.FC<PatientListProps> = ({ onSelectPatient 
                     className="hover:bg-blue-50/40 cursor-pointer transition-colors group"
                   >
                     <td className="py-4 px-4">
-                      <div className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors">
-                        {p.name}
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors">
+                          {p.name}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500 font-semibold px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">
+                          {p.id}
+                        </span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-0.5">
-                        {p.age} yrs &bull; Blood: <strong>{p.blood_group || 'O+'}</strong> &bull; {p.contact}
+                        {p.gender ? `${p.gender} • ` : ''}{p.age} yrs &bull; Blood: <strong>{p.blood_group || 'O+'}</strong> &bull; {p.contact}
                       </div>
+                      {p.current_conditions && (
+                        <div className="text-[10px] text-blue-700 font-medium line-clamp-1 mt-0.5">
+                          {p.current_conditions}
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-4 px-4">
@@ -291,12 +302,22 @@ export const DoctorPatientList: React.FC<PatientListProps> = ({ onSelectPatient 
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-slate-900 hover:text-blue-600 transition-colors">
-                      {p.name}
-                    </h3>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {p.age} yrs &bull; Blood: {p.blood_group || 'O+'}
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-slate-900 hover:text-blue-600 transition-colors">
+                        {p.name}
+                      </h3>
+                      <span className="font-mono text-[10px] text-slate-500 font-semibold px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200">
+                        {p.id}
+                      </span>
                     </div>
+                    <div className="text-xs text-slate-500 mt-0.5">
+                      {p.gender ? `${p.gender} • ` : ''}{p.age} yrs &bull; Blood: {p.blood_group || 'O+'}
+                    </div>
+                    {p.current_conditions && (
+                      <div className="text-[10px] text-blue-700 font-medium line-clamp-1 mt-1">
+                        {p.current_conditions}
+                      </div>
+                    )}
                   </div>
 
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${getStageBadgeColor(p.current_stage)}`}>

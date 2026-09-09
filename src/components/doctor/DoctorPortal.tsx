@@ -34,6 +34,7 @@ import { DoctorSettings } from './DoctorSettings';
 import { DoctorReportsList } from './DoctorReportsList';
 import { DoctorTasksList } from './DoctorTasksList';
 import { DoctorAnalyticsWrapper } from './DoctorAnalyticsWrapper';
+import { authFetch } from '../../utils/api';
 
 export type DoctorTabType = 
   | 'dashboard'
@@ -73,7 +74,7 @@ export const DoctorPortal: React.FC<DoctorPortalProps> = ({ initialPatientId }) 
 
   const fetchUnreadCount = async () => {
     try {
-      const res = await fetch('/api/doctor/notifications');
+      const res = await authFetch('/api/doctor/notifications');
       if (res.ok) {
         const data = await res.json();
         const unread = (data.notifications || []).filter((n: any) => !n.is_read).length;

@@ -97,6 +97,20 @@ export function ensureExtraTablesAndSeeds(db: Database): void {
 
     // Schema migration: Check and add second doctor for St. Jude if not present
     try {
+      const docTaylorCheck = db.exec(`SELECT count(*) as count FROM doctors WHERE id = 'doc-robert-stjude';`);
+      const docTaylorCount = docTaylorCheck[0]?.values[0]?.[0] as number || 0;
+      if (docTaylorCount === 0) {
+        const passwordHash = bcrypt.hashSync('password123', 10);
+        db.run(`
+          INSERT INTO users (id, name, email, password_hash, role, hospital_id) VALUES
+          ('user-doc-robert', 'Dr. Robert Taylor, MD', 'dr.taylor@stjude.org', '${passwordHash}', 'doctor', 'hosp-stjude');
+        `);
+        db.run(`
+          INSERT INTO doctors (id, user_id, hospital_id, specialization, license_number, is_active) VALUES
+          ('doc-robert-stjude', 'user-doc-robert', 'hosp-stjude', 'Emergency & Critical Care', 'MD-CA-67290', 1);
+        `);
+      }
+
       const doc2Check = db.exec(`SELECT count(*) as count FROM doctors WHERE id = 'doc-hayes-stjude';`);
       const doc2Count = doc2Check[0]?.values[0]?.[0] as number || 0;
       if (doc2Count === 0) {
@@ -186,8 +200,187 @@ export function ensureExtraTablesAndSeeds(db: Database): void {
       if (!jCols.includes('clinical_follow_up')) {
         db.run(`ALTER TABLE journey_events ADD COLUMN clinical_follow_up TEXT;`);
       }
+      if (!jCols.includes('journey_id')) {
+        db.run(`ALTER TABLE journey_events ADD COLUMN journey_id TEXT;`);
+      }
     } catch (migErr) {
       console.warn('Migration warning for journey_events:', migErr);
+    }
+
+    // Schema migration: Check and add patient clinical attributes (gender, medical_history, current_conditions, allergies)
+    try {
+      const pTableInfo = db.exec(`PRAGMA table_info(patients);`);
+      const pCols = pTableInfo[0]?.values?.map((row: any) => row[1]) || [];
+      if (!pCols.includes('gender')) {
+        db.run(`ALTER TABLE patients ADD COLUMN gender TEXT;`);
+      }
+      if (!pCols.includes('medical_history')) {
+        db.run(`ALTER TABLE patients ADD COLUMN medical_history TEXT;`);
+      }
+      if (!pCols.includes('current_conditions')) {
+        db.run(`ALTER TABLE patients ADD COLUMN current_conditions TEXT;`);
+      }
+      if (!pCols.includes('allergies')) {
+        db.run(`ALTER TABLE patients ADD COLUMN allergies TEXT;`);
+      }
+
+      // Populate enriched clinical attributes for patient cohort
+      db.run(`
+        UPDATE patients SET
+          gender = 'Male',
+          current_conditions = 'Stress-Induced Sinus Tachycardia (ICD-10 I47.1) • Borderline Primary Hypertension',
+          allergies = 'Penicillin (Severe anaphylaxis) • Sulfa Drugs (Moderate rash)',
+          medical_history = 'Grade II Lateral Ankle Sprain (Resolved Apr 2026) • Family History of Early CAD (Paternal)'
+        WHERE id = 'pat-alex-rivera' AND (gender IS NULL OR gender = '');
+
+        UPDATE patients SET
+          gender = 'Female',
+          current_conditions = 'Exertional Dyspnea & Episodic Palpitations • Mild Iron Deficiency Anemia',
+          allergies = 'Latex (Mild contact dermatitis)',
+          medical_history = 'Childhood exercise-induced bronchospasm • Normal baseline metabolic profile'
+        WHERE id = 'pat-maya-lin' AND (gender IS NULL OR gender = '');
+
+        UPDATE patients SET
+          gender = 'Male',
+          current_conditions = 'Post-PCI LAD Stent Recovery • Hyperlipidemia • Coronary Artery Disease',
+          allergies = 'Shellfish (Moderate angioedema) • Radiocontrast Dye (Mild pruritus)',
+          medical_history = 'Percutaneous Coronary Intervention (Aug 2026) • Essential Hypertension (10 years)'
+        WHERE id = 'pat-marcus-thorne' AND (gender IS NULL OR gender = '');
+
+        UPDATE patients SET
+          gender = 'Male',
+          current_conditions = 'Migraine with Visual Aura • Cranial Neuropathy Monitoring',
+          allergies = 'No Known Drug Allergies (NKDA)',
+          medical_history = 'Recurrent unilateral vascular headaches • No prior surgeries'
+        WHERE id = 'pat-david-kim' AND (gender IS NULL OR gender = '');
+
+        UPDATE patients SET
+          gender = 'Female',
+          current_conditions = 'Right ACL Sprain & Meniscal Alignment • Joint Effusion',
+          allergies = 'Codeine (Mild nausea)',
+          medical_history = 'Athletic knee hyperflexion injury • Candidate for conservative physical therapy'
+        WHERE id = 'pat-lisa-ray' AND (gender IS NULL OR gender = '');
+      `);
+    } catch (patMigErr) {
+      console.warn('Patients schema migration warning:', patMigErr);
+    }
+
+    // Schema migration: Ensure journeys table exists and migrate journeys
+    try {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS journeys (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('active', 'resolved', 'closed')),
+          start_date TEXT NOT NULL,
+          end_date TEXT,
+          category TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+        );
+      `);
+
+      // 1. Ensure active journey for Alex Rivera exists
+      const alexActiveCheck = db.exec(`SELECT count(*) as count FROM journeys WHERE patient_id = 'pat-alex-rivera' AND status = 'active';`);
+      const alexActiveCount = (alexActiveCheck[0]?.values[0]?.[0] as number) || 0;
+      if (alexActiveCount === 0) {
+        db.run(`
+          INSERT INTO journeys (id, patient_id, title, status, start_date, end_date, category)
+          VALUES ('journey-alex-cardio-001', 'pat-alex-rivera', 'Sinus Tachycardia & Episodic Palpitations', 'active', '2026-08-01', NULL, 'Cardiology');
+        `);
+      }
+
+      // Group existing Alex Rivera journey events into the active journey
+      db.run(`
+        UPDATE journey_events
+        SET journey_id = 'journey-alex-cardio-001'
+        WHERE patient_id = 'pat-alex-rivera' AND (journey_id IS NULL OR journey_id = '');
+      `);
+
+      // 2. Ensure historical resolved journey exists for Alex Rivera (Ankle Sprain & Rehabilitation)
+      const alexPastCheck = db.exec(`SELECT count(*) as count FROM journeys WHERE id = 'journey-alex-sprain-000';`);
+      const alexPastCount = (alexPastCheck[0]?.values[0]?.[0] as number) || 0;
+      if (alexPastCount === 0) {
+        db.run(`
+          INSERT INTO journeys (id, patient_id, title, status, start_date, end_date, category)
+          VALUES ('journey-alex-sprain-000', 'pat-alex-rivera', 'Grade II Ankle Sprain & Physical Rehabilitation', 'resolved', '2026-03-10', '2026-04-22', 'Orthopedics');
+        `);
+
+        // Insert complete 8-stage historical events for the resolved ankle sprain episode
+        db.run(`
+          INSERT OR IGNORE INTO journey_events (id, patient_id, journey_id, stage, title, description, date, status, doctor_id, hospital_id, next_step, clinical_note, doctor_plan, clinical_follow_up) VALUES
+          ('ev-sprain-001', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Symptoms', 'Acute Lateral Ankle Inversion Injury & Swelling', 'Patient suffered sharp twisting injury during weekend trail run. Acute lateral swelling, ecchymosis, and inability to bear weight comfortably.', '2026-03-10', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Urgent orthopedic triage', 'Triage exam: Acute soft tissue edema over ATFL. Neurovascularly intact.', 'Immobilization in air-stirrup splint and RICE protocol ordered.', '2026-03-12'),
+          ('ev-sprain-002', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Consultation', 'Orthopedic Clinical Evaluation & Stress Assessment', 'Comprehensive clinical assessment with Dr. Robert Taylor. Ottawa Ankle Rules evaluated; focal tenderness over anterior talofibular ligament.', '2026-03-12', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Order bilateral weight-bearing radiographs', 'Anterior drawer sign positive (mild laxity, intact endpoint). Talar tilt test equivocal.', 'Prescribe weight-bearing X-ray and diagnostic musculoskeletal ultrasound.', '2026-03-14'),
+          ('ev-sprain-003', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Tests', 'Ankle Radiographs & High-Resolution Ultrasound', 'Three-view radiographs (AP, lateral, mortise) and musculoskeletal ultrasound completed at St. Jude Radiology.', '2026-03-14', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Radiology interpretation review', 'Ultrasound shows hypoechoic thickening and partial fiber discontinuity of anterior talofibular ligament.', 'Await radiologist final confirmation.', '2026-03-16'),
+          ('ev-sprain-004', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Test Result', 'Imaging Confirmation: No Fracture, Grade II ATFL Tear', 'Radiology report confirmed intact cortical margins, no syndesmotic widening or avulsion fracture. Grade II ATFL partial tear documented.', '2026-03-16', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Formulate rehabilitation protocol', 'Syndesmosis intact. Mortise symmetric. Isolated grade II ligamentous sprain.', 'Initiate structured physical therapy regimen and protected weight-bearing.', '2026-03-18'),
+          ('ev-sprain-005', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Diagnosis', 'Diagnosis: Grade II Left Ankle Inversion Sprain', 'Formal diagnosis established: Grade II Inversion Sprain of the Left Ankle with ATFL partial tear. Conservative functional treatment pathway indicated.', '2026-03-18', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Commence targeted physical therapy', 'Patient educated on ligament remodeling phases. Instructed on progressive loading.', 'Referral to Physical Therapy; NSAIDs for 5 days as needed.', '2026-03-22'),
+          ('ev-sprain-006', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Treatment', 'Functional Physical Therapy & Proprioceptive Training', 'Initiated twice-weekly PT at St. Jude Rehab. Exercises included isometric peroneus activation, ankle alphabet, and wobble-board balance drills.', '2026-03-22', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Mid-point functional re-assessment', 'Dorsiflexion improved to 15 degrees. Swelling substantially diminished.', 'Progress to single-leg dynamic stabilization drills.', '2026-04-08'),
+          ('ev-sprain-007', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Recovery', 'Dynamic Balance Restoration & Jogging Progression', 'Patient achieved 100% pain-free normal gait. Y-balance test symmetry reached 94%. Completed straight-line jogging test without pain or apprehension.', '2026-04-08', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Final discharge clinical evaluation', 'Excellent ligamentous stability. Zero effusion. Ankle range of motion symmetric.', 'Cleared for gradual return to outdoor recreational running with supportive footwear.', '2026-04-22'),
+          ('ev-sprain-008', 'pat-alex-rivera', 'journey-alex-sprain-000', 'Follow-up', 'Episode Resolution & Full Discharge Clearance', 'Final evaluation with Dr. Robert Taylor. Full recovery confirmed. Ankle stability restored to baseline. Care journey marked as resolved.', '2026-04-22', 'completed', 'doc-robert-stjude', 'hosp-stjude', 'Care journey resolved; return to annual wellness maintenance', 'Final clinical note: Complete functional resolution of Grade II ankle sprain. No chronic instability. Episode closed successfully.', 'Maintenance home exercise protocol provided for ankle inversion prevention.', '2026-04-22');
+        `);
+      }
+
+      // 3. Ensure Maya Lin, Marcus Thorne, David Kim have journeys and their events updated
+      const otherPatients = [
+        { id: 'pat-maya-lin', jId: 'journey-maya-cardio-001', title: 'Exertional Dyspnea & Palpitation Evaluation', start: '2026-08-10', cat: 'Cardiology' },
+        { id: 'pat-marcus-thorne', jId: 'journey-thorne-cardio-001', title: 'Post-PCI LAD Stent Recovery & Cardiac Rehabilitation', start: '2026-07-05', cat: 'Cardiology' },
+        { id: 'pat-david-kim', jId: 'journey-david-neuro-001', title: 'Chronic Migraine & Visual Aura Evaluation', start: '2026-08-12', cat: 'Neurology' },
+      ];
+
+      otherPatients.forEach(p => {
+        const check = db.exec(`SELECT count(*) as count FROM journeys WHERE id = '${p.jId}';`);
+        const count = (check[0]?.values[0]?.[0] as number) || 0;
+        if (count === 0) {
+          db.run(`
+            INSERT INTO journeys (id, patient_id, title, status, start_date, end_date, category)
+            VALUES ('${p.jId}', '${p.id}', '${p.title}', 'active', '${p.start}', NULL, '${p.cat}');
+          `);
+        }
+        db.run(`
+          UPDATE journey_events
+          SET journey_id = '${p.jId}'
+          WHERE patient_id = '${p.id}' AND (journey_id IS NULL OR journey_id = '');
+        `);
+      });
+
+      // Enrich symptoms for Marcus Thorne if only Fatigue exists
+      try {
+        const thorneSymCheck = db.exec(`
+          SELECT count(DISTINCT s.name) as count 
+          FROM symptoms s
+          JOIN daily_health_records r ON s.daily_record_id = r.id
+          WHERE r.patient_id = 'pat-marcus-thorne';
+        `);
+        const symCount = (thorneSymCheck[0]?.values[0]?.[0] as number) || 0;
+        if (symCount <= 1) {
+          const recs = db.exec(`SELECT id, date, stress_level, sleep_hours FROM daily_health_records WHERE patient_id = 'pat-marcus-thorne' ORDER BY date ASC;`);
+          const rows = recs[0]?.values || [];
+          rows.forEach((row: any) => {
+            const recId = row[0];
+            const date = row[1];
+            const stress = Number(row[2]) || 3;
+            const sleep = Number(row[3]) || 7;
+            
+            // Add realistic clinical post-PCI recovery symptoms correlated with stress & sleep
+            const headacheSev = sleep < 7.2 ? Math.min(5, Math.max(1, Math.round((8 - sleep) * 2))) : (stress > 3 ? 2 : 0);
+            const palpSev = stress >= 3 ? Math.min(4, Math.max(1, stress - 1)) : 0;
+            const fatigueSev = sleep < 7.5 ? 3 : 1;
+
+            if (headacheSev > 0) {
+              db.run(`INSERT INTO symptoms (id, daily_record_id, name, severity, notes) VALUES ('${uuidv4()}', '${recId}', 'Headache', ${headacheSev}, 'Post-walking mild tension');`);
+            }
+            if (palpSev > 0) {
+              db.run(`INSERT INTO symptoms (id, daily_record_id, name, severity, notes) VALUES ('${uuidv4()}', '${recId}', 'Heart Palpitations', ${palpSev}, 'Mild transient flutter after exertion');`);
+            }
+          });
+        }
+      } catch (symEnrichErr) {
+        console.warn('Marcus Thorne symptom enrich warning:', symEnrichErr);
+      }
+    } catch (jMigErr) {
+      console.warn('Journeys migration error:', jMigErr);
     }
 
     // Check if daily health records exist for Alex Rivera
@@ -229,22 +422,103 @@ export function ensureExtraTablesAndSeeds(db: Database): void {
       });
     }
 
-    // Ensure all 8 journey events exist for Alex Rivera
-    const stagesCheck = db.exec(`SELECT count(*) as count FROM journey_events WHERE patient_id = 'pat-alex-rivera';`);
+    // Ensure Maya Lin has 14 full days of health records (Aug 14-27, 2026)
+    try {
+      const mayaHealthCheck = db.exec(`SELECT count(*) as count FROM daily_health_records WHERE patient_id = 'pat-maya-lin';`);
+      const mayaCount = (mayaHealthCheck[0]?.values[0]?.[0] as number) || 0;
+      if (mayaCount < 14) {
+        const extraMayaDays = [
+          { date: '2026-08-14', sleep: 6.2, quality: 'Fair', exercise: 15, water: 6, meals: 3, stress: 6, mood: 'Tired', med: 1, med_m: 1, med_a: 0, med_n: 1, notes: 'Feeling slightly fatigued in the afternoon.', symptoms: [{ name: 'Heart Palpitations', severity: 4 }, { name: 'Fatigue', severity: 4 }] },
+          { date: '2026-08-15', sleep: 5.8, quality: 'Fair', exercise: 10, water: 5, meals: 2, stress: 7, mood: 'Anxious', med: 1, med_m: 1, med_a: 0, med_n: 1, notes: 'Work deadline approaching, noticed skipped heartbeats.', symptoms: [{ name: 'Heart Palpitations', severity: 6 }, { name: 'Headache', severity: 5 }, { name: 'Fatigue', severity: 5 }] },
+          { date: '2026-08-16', sleep: 6.0, quality: 'Fair', exercise: 15, water: 6, meals: 3, stress: 7, mood: 'Stressed', med: 1, med_m: 1, med_a: 0, med_n: 1, notes: 'Consultation with Dr. Sarah Chen at St. Jude today.', symptoms: [{ name: 'Heart Palpitations', severity: 5 }, { name: 'Headache', severity: 4 }] },
+          { date: '2026-08-17', sleep: 5.4, quality: 'Poor', exercise: 0, water: 5, meals: 2, stress: 8, mood: 'Anxious', med: 1, med_m: 1, med_a: 0, med_n: 1, notes: 'Poor sleep, felt uneasy and fluttery.', symptoms: [{ name: 'Heart Palpitations', severity: 7 }, { name: 'Fatigue', severity: 6 }, { name: 'Headache', severity: 5 }] },
+          { date: '2026-08-18', sleep: 6.5, quality: 'Good', exercise: 20, water: 7, meals: 3, stress: 5, mood: 'Calm', med: 1, med_m: 1, med_a: 0, med_n: 1, notes: 'Took light walk after dinner, felt much better.', symptoms: [{ name: 'Heart Palpitations', severity: 3 }, { name: 'Fatigue', severity: 3 }] },
+          { date: '2026-08-19', sleep: 5.9, quality: 'Fair', exercise: 10, water: 6, meals: 3, stress: 6, mood: 'Neutral', med: 1, med_m: 1, med_a: 0, med_n: 1, notes: 'Followed relaxation breathing exercises.', symptoms: [{ name: 'Heart Palpitations', severity: 4 }, { name: 'Fatigue', severity: 4 }] },
+          { date: '2026-08-20', sleep: 5.5, quality: 'Fair', exercise: 10, water: 6, meals: 2, stress: 7, mood: 'Anxious', med: 1, med_m: 1, med_a: 0, med_n: 1, notes: 'Magnesium started per prescription.', symptoms: [{ name: 'Heart Palpitations', severity: 5 }, { name: 'Headache', severity: 4 }, { name: 'Fatigue', severity: 5 }] }
+        ];
+        extraMayaDays.forEach(d => {
+          const exists = db.exec(`SELECT 1 FROM daily_health_records WHERE patient_id = 'pat-maya-lin' AND date = '${d.date}'`);
+          if (!exists || !exists[0]?.values?.length) {
+            const recId = uuidv4();
+            db.run(`
+              INSERT INTO daily_health_records (id, patient_id, date, sleep_hours, sleep_quality, exercise_minutes, water_intake, meal_count, stress_level, mood, medication_taken, med_morning, med_afternoon, med_night, notes) VALUES
+              ('${recId}', 'pat-maya-lin', '${d.date}', ${d.sleep}, '${d.quality}', ${d.exercise}, ${d.water}, ${d.meals}, ${d.stress}, '${d.mood}', ${d.med}, ${d.med_m || 0}, ${d.med_a || 0}, ${d.med_n || 0}, '${d.notes.replace(/'/g, "''")}');
+            `);
+            d.symptoms.forEach(s => {
+              db.run(`
+                INSERT INTO symptoms (id, daily_record_id, name, severity, notes) VALUES
+                ('${uuidv4()}', '${recId}', '${s.name}', ${s.severity}, '');
+              `);
+            });
+          }
+        });
+      }
+    } catch (mErr) {
+      console.warn('Maya Lin extra days seeding check:', mErr);
+    }
+
+    // Ensure Marcus Thorne has 14 full days of health records (Aug 14-27, 2026)
+    try {
+      const thorneHealthCheck = db.exec(`SELECT count(*) as count FROM daily_health_records WHERE patient_id = 'pat-marcus-thorne';`);
+      const thorneCount = (thorneHealthCheck[0]?.values[0]?.[0] as number) || 0;
+      if (thorneCount < 14) {
+        const extraThorneDays = [
+          { date: '2026-08-14', sleep: 7.0, quality: 'Good', exercise: 15, water: 7, meals: 3, stress: 4, mood: 'Good', med: 1, med_m: 1, med_a: 1, med_n: 1, notes: 'Gentle walking indoors.', symptoms: [{ name: 'Fatigue', severity: 4 }] },
+          { date: '2026-08-15', sleep: 7.2, quality: 'Good', exercise: 20, water: 8, meals: 3, stress: 3, mood: 'Good', med: 1, med_m: 1, med_a: 1, med_n: 1, notes: 'Recovering energy steadily.', symptoms: [{ name: 'Fatigue', severity: 3 }] },
+          { date: '2026-08-16', sleep: 7.0, quality: 'Good', exercise: 20, water: 8, meals: 3, stress: 3, mood: 'Good', med: 1, med_m: 1, med_a: 1, med_n: 1, notes: 'Taking Lisinopril and Atorvastatin as directed.', symptoms: [{ name: 'Fatigue', severity: 3 }] },
+          { date: '2026-08-17', sleep: 7.4, quality: 'Good', exercise: 20, water: 8, meals: 3, stress: 3, mood: 'Good', med: 1, med_m: 1, med_a: 1, med_n: 1, notes: 'BP 122/78, resting HR 68.', symptoms: [{ name: 'Fatigue', severity: 2 }] }
+        ];
+        extraThorneDays.forEach(d => {
+          const exists = db.exec(`SELECT 1 FROM daily_health_records WHERE patient_id = 'pat-marcus-thorne' AND date = '${d.date}'`);
+          if (!exists || !exists[0]?.values?.length) {
+            const recId = uuidv4();
+            db.run(`
+              INSERT INTO daily_health_records (id, patient_id, date, sleep_hours, sleep_quality, exercise_minutes, water_intake, meal_count, stress_level, mood, medication_taken, med_morning, med_afternoon, med_night, notes) VALUES
+              ('${recId}', 'pat-marcus-thorne', '${d.date}', ${d.sleep}, '${d.quality}', ${d.exercise}, ${d.water}, ${d.meals}, ${d.stress}, '${d.mood}', ${d.med}, ${d.med_m || 0}, ${d.med_a || 0}, ${d.med_n || 0}, '${d.notes.replace(/'/g, "''")}');
+            `);
+            d.symptoms.forEach(s => {
+              db.run(`
+                INSERT INTO symptoms (id, daily_record_id, name, severity, notes) VALUES
+                ('${uuidv4()}', '${recId}', '${s.name}', ${s.severity}, '');
+              `);
+            });
+          }
+        });
+      }
+    } catch (tErr) {
+      console.warn('Marcus Thorne extra days seeding check:', tErr);
+    }
+
+    // Ensure Dr. Robert Taylor has appointment with Maya Lin for cross-doctor testing
+    try {
+      const taylorAppCheck = db.exec(`SELECT count(*) as count FROM appointments WHERE doctor_id = 'doc-robert-stjude' AND patient_id = 'pat-maya-lin';`);
+      const tCount = (taylorAppCheck[0]?.values[0]?.[0] as number) || 0;
+      if (tCount === 0) {
+        db.run(`
+          INSERT INTO appointments (id, patient_id, doctor_id, hospital_id, date, time, purpose, status, notes) VALUES
+          ('app-taylor-maya-001', 'pat-maya-lin', 'doc-robert-stjude', 'hosp-st-jude', '2026-08-29', '02:00 PM', 'Electrophysiology Arrhythmia Secondary Evaluation', 'upcoming', 'Secondary evaluation of exertional heart rate spikes and Holter findings.');
+        `);
+      }
+    } catch (atErr) {
+      console.warn('Taylor appointment check:', atErr);
+    }
+
+    // Ensure all 8 journey events exist for Alex Rivera's active cardiology journey
+    const stagesCheck = db.exec(`SELECT count(*) as count FROM journey_events WHERE patient_id = 'pat-alex-rivera' AND journey_id = 'journey-alex-cardio-001';`);
     const journeyCount = stagesCheck[0]?.values[0]?.[0] as number || 0;
     if (journeyCount < 8) {
       // Re-populate complete 8 stages for Alex Rivera
-      db.run(`DELETE FROM journey_events WHERE patient_id = 'pat-alex-rivera';`);
+      db.run(`DELETE FROM journey_events WHERE patient_id = 'pat-alex-rivera' AND journey_id = 'journey-alex-cardio-001';`);
       db.run(`
-        INSERT INTO journey_events (id, patient_id, stage, title, description, date, status, doctor_id, hospital_id, next_step, clinical_note, doctor_plan, clinical_follow_up) VALUES
-        ('ev-symptoms-001', 'pat-alex-rivera', 'Symptoms', 'Initial Episodic Palpitations & Tension Headaches', 'Patient experienced recurring palpitations, chest flutter, and frontal headaches aggravated during intense project deadlines and irregular sleep.', '2026-08-01', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Schedule cardiology consultation', 'Patient presented with 2-week history of sinus palpitations.', 'Baseline clinical workup ordered.', '2026-08-06'),
-        ('ev-consult-002', 'pat-alex-rivera', 'Consultation', 'Cardiology Diagnostic Consultation', 'Comprehensive in-clinic consultation with Dr. Sarah Chen. Resting BP 138/88 mmHg, resting pulse 94 bpm. Ordered 12-lead ECG, 48-hr ambulatory Holter monitor, and comprehensive blood panel.', '2026-08-06', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Complete Holter monitor and echocardiogram', 'Physical exam: S1/S2 present, no murmurs. Resting tachycardia (94 bpm). Advised caffeine restriction.', 'Ordered ambulatory telemetry and metabolic labs.', '2026-08-15'),
-        ('ev-tests-003', 'pat-alex-rivera', 'Tests', 'Holter Monitor & Cardiac Blood Panel Execution', 'Diagnostic tests conducted at St. Jude Cardiac Lab. 48-hour continuous monitor worn and full metabolic panel drawn.', '2026-08-12', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Review lab telemetry and confirm formal diagnosis', 'Lab specimens received and Holter telemetry uploaded without artifact.', 'Awaiting pathology report.', '2026-08-15'),
-        ('ev-testres-004', 'pat-alex-rivera', 'Test Result', 'ECG & Cardiac Lab Diagnostics Uploaded', 'Holter analysis demonstrated intermittent sinus tachycardia during midday and evening hours with isolated PACs. Normal cardiac ultrasound & ejection fraction (62%). Blood chemistry normal.', '2026-08-15', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Doctor clinical review & diagnosis formulation', 'ECG indicates regular sinus rhythm with rate acceleration during stress triggers. No QT prolongation.', 'Formulate autonomic stabilization regimen.', '2026-08-18'),
-        ('ev-diag-005', 'pat-alex-rivera', 'Diagnosis', 'Diagnosis: Stress-Induced Sinus Tachycardia', 'Formal clinical diagnosis established. Correlated with autonomic stress reactivity and sleep deprivation. No structural cardiomyopathy or ischemia detected.', '2026-08-18', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Initiate tailored beta-blocker protocol & daily health logging', 'Diagnosis confirmed: Sinus Tachycardia Secondary to Autonomic Stress Reactivity. Patient reassured.', 'Initiate low-dose Metoprolol 25mg ER and lifestyle sleep hygiene.', '2026-08-20'),
-        ('ev-treat-006', 'pat-alex-rivera', 'Treatment', 'Metoprolol Protocol & Daily Health Logging', 'Prescribed low-dose Metoprolol Succinate 25mg daily. Initiated daily CareFlow tracking for sleep, hydration, and stress correlation.', '2026-08-20', 'current', 'doc-chen-stjude', 'hosp-st-jude', 'Follow-up appointment on Sep 2nd, 2026 for 2-week response review', 'Patient started Metoprolol Succinate 25mg once daily. Instructed on daily logging in CareFlow portal.', 'Assess symptom resolution, resting heart rate response, and sleep restoration at 2 weeks.', '2026-09-02'),
-        ('ev-recov-007', 'pat-alex-rivera', 'Recovery', 'Holter Re-assessment & Cardiac Stabilization', 'Scheduled 30-day rhythm check. Goal: Heart rate resting <75 bpm, zero palpitation episodes, and normalized sleep recovery scores.', '2026-09-10', 'upcoming', 'doc-chen-stjude', 'hosp-st-jude', 'Repeat 24-hr Holter patch if symptom score remains <2/10', NULL, NULL, NULL),
-        ('ev-follow-008', 'pat-alex-rivera', 'Follow-up', 'Comprehensive 60-Day Progress & Discharge Review', 'Final milestone evaluation with Dr. Sarah Chen to assess long-term dosage weaning or maintenance protocol.', '2026-09-25', 'upcoming', 'doc-chen-stjude', 'hosp-st-jude', 'Transition to maintenance phase with quarterly check-ins', NULL, NULL, NULL);
+        INSERT INTO journey_events (id, patient_id, journey_id, stage, title, description, date, status, doctor_id, hospital_id, next_step, clinical_note, doctor_plan, clinical_follow_up) VALUES
+        ('ev-symptoms-001', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Symptoms', 'Initial Episodic Palpitations & Tension Headaches', 'Patient experienced recurring palpitations, chest flutter, and frontal headaches aggravated during intense project deadlines and irregular sleep.', '2026-08-01', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Schedule cardiology consultation', 'Patient presented with 2-week history of sinus palpitations.', 'Baseline clinical workup ordered.', '2026-08-06'),
+        ('ev-consult-002', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Consultation', 'Cardiology Diagnostic Consultation', 'Comprehensive in-clinic consultation with Dr. Sarah Chen. Resting BP 138/88 mmHg, resting pulse 94 bpm. Ordered 12-lead ECG, 48-hr ambulatory Holter monitor, and comprehensive blood panel.', '2026-08-06', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Complete Holter monitor and echocardiogram', 'Physical exam: S1/S2 present, no murmurs. Resting tachycardia (94 bpm). Advised caffeine restriction.', 'Ordered ambulatory telemetry and metabolic labs.', '2026-08-15'),
+        ('ev-tests-003', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Tests', 'Holter Monitor & Cardiac Blood Panel Execution', 'Diagnostic tests conducted at St. Jude Cardiac Lab. 48-hour continuous monitor worn and full metabolic panel drawn.', '2026-08-12', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Review lab telemetry and confirm formal diagnosis', 'Lab specimens received and Holter telemetry uploaded without artifact.', 'Awaiting pathology report.', '2026-08-15'),
+        ('ev-testres-004', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Test Result', 'ECG & Cardiac Lab Diagnostics Uploaded', 'Holter analysis demonstrated intermittent sinus tachycardia during midday and evening hours with isolated PACs. Normal cardiac ultrasound & ejection fraction (62%). Blood chemistry normal.', '2026-08-15', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Doctor clinical review & diagnosis formulation', 'ECG indicates regular sinus rhythm with rate acceleration during stress triggers. No QT prolongation.', 'Formulate autonomic stabilization regimen.', '2026-08-18'),
+        ('ev-diag-005', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Diagnosis', 'Diagnosis: Stress-Induced Sinus Tachycardia', 'Formal clinical diagnosis established. Correlated with autonomic stress reactivity and sleep deprivation. No structural cardiomyopathy or ischemia detected.', '2026-08-18', 'completed', 'doc-chen-stjude', 'hosp-st-jude', 'Initiate tailored beta-blocker protocol & daily health logging', 'Diagnosis confirmed: Sinus Tachycardia Secondary to Autonomic Stress Reactivity. Patient reassured.', 'Initiate low-dose Metoprolol 25mg ER and lifestyle sleep hygiene.', '2026-08-20'),
+        ('ev-treat-006', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Treatment', 'Metoprolol Protocol & Daily Health Logging', 'Prescribed low-dose Metoprolol Succinate 25mg daily. Initiated daily CareFlow tracking for sleep, hydration, and stress correlation.', '2026-08-20', 'current', 'doc-chen-stjude', 'hosp-st-jude', 'Follow-up appointment on Sep 2nd, 2026 for 2-week response review', 'Patient started Metoprolol Succinate 25mg once daily. Instructed on daily logging in CareFlow portal.', 'Assess symptom resolution, resting heart rate response, and sleep restoration at 2 weeks.', '2026-09-02'),
+        ('ev-recov-007', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Recovery', 'Holter Re-assessment & Cardiac Stabilization', 'Scheduled 30-day rhythm check. Goal: Heart rate resting <75 bpm, zero palpitation episodes, and normalized sleep recovery scores.', '2026-09-10', 'upcoming', 'doc-chen-stjude', 'hosp-st-jude', 'Repeat 24-hr Holter patch if symptom score remains <2/10', NULL, NULL, NULL),
+        ('ev-follow-008', 'pat-alex-rivera', 'journey-alex-cardio-001', 'Follow-up', 'Comprehensive 60-Day Progress & Discharge Review', 'Final milestone evaluation with Dr. Sarah Chen to assess long-term dosage weaning or maintenance protocol.', '2026-09-25', 'upcoming', 'doc-chen-stjude', 'hosp-st-jude', 'Transition to maintenance phase with quarterly check-ins', NULL, NULL, NULL);
       `);
     }
 
@@ -352,6 +626,50 @@ export function ensureExtraTablesAndSeeds(db: Database): void {
       console.warn('Caregiver table migration check error:', cgErr);
     }
 
+    // Ensure clinical notes and medical reports are populated for Alex Rivera, Maya Lin, and Marcus Thorne
+    try {
+      const alexNotesCheck = db.exec(`SELECT count(*) as count FROM clinical_notes WHERE patient_id = 'pat-alex-rivera';`);
+      const alexNotesCount = alexNotesCheck[0]?.values[0]?.[0] as number || 0;
+      if (alexNotesCount < 4) {
+        db.run(`
+          INSERT INTO clinical_notes (id, patient_id, doctor_id, journey_event_id, title, note, plan, follow_up_date, created_at) VALUES
+          ('${uuidv4()}', 'pat-alex-rivera', 'doc-chen-stjude', 'ev-tests-003', 'Diagnostic Workup & Holter Attachment Briefing', 'Patient arrived for 48-hour Holter monitor lead placement. Instructions provided regarding activity logging.', 'Review telemetry upon device return.', '2026-08-15', '2026-08-12 10:15:00'),
+          ('${uuidv4()}', 'pat-alex-rivera', 'doc-chen-stjude', 'ev-treat-006', 'Mid-Treatment Telemetry & Metoprolol Response Review', 'Check-in on Day 4 of Metoprolol Succinate ER 25mg. Significant reduction in resting pulse (72 bpm vs 94 bpm) and fewer palpitation spikes.', 'Continue current dosage. Bedtime routine encouraged.', '2026-09-02', '2026-08-24 14:30:00');
+        `);
+      }
+
+      const mayaNotesCheck = db.exec(`SELECT count(*) as count FROM clinical_notes WHERE patient_id = 'pat-maya-lin';`);
+      const mayaNotesCount = mayaNotesCheck[0]?.values[0]?.[0] as number || 0;
+      if (mayaNotesCount < 3) {
+        db.run(`
+          INSERT INTO clinical_notes (id, patient_id, doctor_id, journey_event_id, title, note, plan, follow_up_date, created_at) VALUES
+          ('${uuidv4()}', 'pat-maya-lin', 'doc-chen-stjude', 'ev-maya-001', 'Initial Triage & Exertional Palpitations Evaluation', 'Patient presents with episodic post-prandial palpitations and lightheadedness when climbing stairs. BP 134/86, HR 88 bpm.', 'Scheduled full cardiovascular diagnostic triage.', '2026-08-16', '2026-08-10 11:00:00'),
+          ('${uuidv4()}', 'pat-maya-lin', 'doc-chen-stjude', 'ev-maya-003', 'Pre-Stress Echo Protocol & Workup Consultation', 'Pre-procedure review with patient. Fasting guidelines reviewed.', 'Proceed with stress echo on Aug 27 at 09:00 AM.', '2026-08-27', '2026-08-25 15:45:00');
+        `);
+      }
+
+      const mayaReportsCheck = db.exec(`SELECT count(*) as count FROM medical_reports WHERE patient_id = 'pat-maya-lin';`);
+      const mayaReportsCount = mayaReportsCheck[0]?.values[0]?.[0] as number || 0;
+      if (mayaReportsCount < 3) {
+        db.run(`
+          INSERT INTO medical_reports (id, patient_id, doctor_id, hospital_id, name, type, date, file, journey_stage) VALUES
+          ('${uuidv4()}', 'pat-maya-lin', 'doc-chen-stjude', 'hosp-stjude', 'Thyroid Stimulating Hormone & Metabolic Panel', 'PDF', '2026-08-20', 'maya_metabolic_panel.pdf', 'Tests'),
+          ('${uuidv4()}', 'pat-maya-lin', 'doc-chen-stjude', 'hosp-stjude', 'Treadmill Stress Echo Preliminary Rhythm Tracing', 'PDF', '2026-08-27', 'maya_stress_echo_prelim.pdf', 'Tests');
+        `);
+      }
+
+      const marcusReportsCheck = db.exec(`SELECT count(*) as count FROM medical_reports WHERE patient_id = 'pat-marcus-thorne';`);
+      const marcusReportsCount = marcusReportsCheck[0]?.values[0]?.[0] as number || 0;
+      if (marcusReportsCount < 3) {
+        db.run(`
+          INSERT INTO medical_reports (id, patient_id, doctor_id, hospital_id, name, type, date, file, journey_stage) VALUES
+          ('${uuidv4()}', 'pat-marcus-thorne', 'doc-chen-stjude', 'hosp-stjude', 'Cardiac Rehabilitation Exercise Tolerance Report', 'PDF', '2026-08-22', 'thorne_rehab_stress_aug22.pdf', 'Recovery');
+        `);
+      }
+    } catch (enrichErr) {
+      console.warn('Demo data enrichment check warning:', enrichErr);
+    }
+
     saveDb();
   } catch (err) {
     console.error('Error ensuring extra tables and seeds:', err);
@@ -385,12 +703,16 @@ export async function initSchemaAndSeed(db: Database): Promise<void> {
       id TEXT PRIMARY KEY,
       user_id TEXT UNIQUE NOT NULL,
       date_of_birth TEXT,
+      gender TEXT,
       contact TEXT,
       emergency_contact TEXT,
       blood_group TEXT,
       current_stage TEXT DEFAULT 'Diagnosis',
       doctor_id TEXT,
       hospital_id TEXT,
+      medical_history TEXT,
+      current_conditions TEXT,
+      allergies TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (hospital_id) REFERENCES hospitals(id)
@@ -408,9 +730,23 @@ export async function initSchemaAndSeed(db: Database): Promise<void> {
       FOREIGN KEY (hospital_id) REFERENCES hospitals(id)
     );
 
+    CREATE TABLE IF NOT EXISTS journeys (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('active', 'resolved', 'closed')),
+      start_date TEXT NOT NULL,
+      end_date TEXT,
+      category TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS journey_events (
       id TEXT PRIMARY KEY,
       patient_id TEXT NOT NULL,
+      journey_id TEXT,
       stage TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
@@ -424,6 +760,7 @@ export async function initSchemaAndSeed(db: Database): Promise<void> {
       clinical_follow_up TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+      FOREIGN KEY (journey_id) REFERENCES journeys(id) ON DELETE CASCADE,
       FOREIGN KEY (doctor_id) REFERENCES doctors(id),
       FOREIGN KEY (hospital_id) REFERENCES hospitals(id)
     );

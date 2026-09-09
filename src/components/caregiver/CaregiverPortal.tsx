@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   HeartHandshake, 
   User, 
@@ -76,7 +77,7 @@ export const CaregiverPortal: React.FC = () => {
     try {
       setLoadingList(true);
       setError(null);
-      const res = await fetch('/api/caregiver/patients');
+      const res = await authFetch('/api/caregiver/patients');
       if (!res.ok) {
         throw new Error('Failed to load linked patients');
       }
@@ -97,7 +98,7 @@ export const CaregiverPortal: React.FC = () => {
     try {
       setLoadingData(true);
       setError(null);
-      const res = await fetch(`/api/caregiver/patients/${patientId}/data`);
+      const res = await authFetch(`/api/caregiver/patients/${patientId}/data`);
       if (!res.ok) {
         throw new Error('Unable to access patient care data');
       }

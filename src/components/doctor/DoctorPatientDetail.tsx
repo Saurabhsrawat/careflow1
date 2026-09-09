@@ -24,9 +24,15 @@ import {
   ClipboardList,
   Edit3,
   BrainCircuit,
-  MessageSquare
+  MessageSquare,
+  Phone,
+  Mail,
+  Shield,
+  Info
 } from 'lucide-react';
 import { DoctorCrossAnalytics } from './DoctorCrossAnalytics';
+import { DoctorHealthAnalytics } from './DoctorHealthAnalytics';
+import { authFetch } from '../../utils/api';
 
 interface PatientDetailProps {
   patientId: string;
@@ -104,7 +110,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
   const fetchPatientDetails = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/doctor/patients/${patientId}`);
+      const res = await authFetch(`/api/doctor/patients/${patientId}`);
       if (res.ok) {
         const data = await res.json();
         setPatientData(data);
@@ -123,7 +129,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
   const handleAddJourneyEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/doctor/patients/${patientId}/journey`, {
+      const res = await authFetch(`/api/doctor/patients/${patientId}/journey`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(journeyForm)
@@ -153,7 +159,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
     try {
       if (selectedJourneyEventForNote) {
         // Add note to specific journey event
-        const res = await fetch(`/api/doctor/patients/${patientId}/journey/${selectedJourneyEventForNote.id}/note`, {
+        const res = await authFetch(`/api/doctor/patients/${patientId}/journey/${selectedJourneyEventForNote.id}/note`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -170,7 +176,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
         }
       } else {
         // Add general clinical note
-        const res = await fetch(`/api/doctor/patients/${patientId}/clinical-notes`, {
+        const res = await authFetch(`/api/doctor/patients/${patientId}/clinical-notes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(noteForm)
@@ -189,7 +195,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
   const handleAddPrescription = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/doctor/patients/${patientId}/prescriptions`, {
+      const res = await authFetch(`/api/doctor/patients/${patientId}/prescriptions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(prescriptionForm)
@@ -212,7 +218,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
 
   const handleTogglePrescriptionStatus = async (id: string, newStatus: string) => {
     try {
-      await fetch(`/api/doctor/prescriptions/${id}`, {
+      await authFetch(`/api/doctor/prescriptions/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -226,7 +232,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/doctor/patients/${patientId}/tasks`, {
+      const res = await authFetch(`/api/doctor/patients/${patientId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(taskForm)
@@ -248,7 +254,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
   const handleScheduleAppt = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/doctor/appointments', {
+      const res = await authFetch('/api/doctor/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -320,6 +326,9 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
                 <h1 className="text-2xl font-bold text-slate-900">
                   {patient.name}
                 </h1>
+                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
+                  ID: {patient.id}
+                </span>
                 <span className="text-xs font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-900 border border-blue-200">
                   Stage: {patient.current_stage}
                 </span>
@@ -327,7 +336,7 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
                   Adherence: {patient.adherence_percent}%
                 </span>
                 <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
-                  DOB: {patient.date_of_birth} ({patient.age} yrs)
+                  {patient.gender || 'Not specified'} • {patient.age ? `${patient.age} yrs` : ''} (DOB: {patient.date_of_birth})
                 </span>
                 <span className="text-xs font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800">
                   Blood: {patient.blood_group || 'O+'}
@@ -335,10 +344,11 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
               </div>
 
               <div className="flex flex-wrap items-center gap-y-1 gap-x-5 text-xs text-slate-500 mt-2">
-                <span><strong>Contact:</strong> {patient.contact}</span>
-                <span><strong>Emergency:</strong> {patient.emergency_contact}</span>
-                <span><strong>Hospital:</strong> {patient.hospital_name}</span>
-                <span><strong>Attending:</strong> Dr. Sarah Chen, MD</span>
+                <span><strong>Contact:</strong> {patient.contact || 'N/A'}</span>
+                <span><strong>Emergency:</strong> {patient.emergency_contact || 'N/A'}</span>
+                <span><strong>Email:</strong> {patient.email}</span>
+                <span><strong>Hospital:</strong> {patient.hospital_name || 'St. Jude Medical Center'}</span>
+                <span><strong>Attending:</strong> {patient.doctor_name || 'Dr. Sarah Chen, MD'}</span>
               </div>
             </div>
           </div>
@@ -409,6 +419,107 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Comprehensive Clinical & Medical Profile */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Card 1: Clinical Conditions, Medical History & Allergies */}
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-sm font-bold text-slate-900">Clinical Diagnosis & Medical History</h3>
+                </div>
+                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  Care Plan Active
+                </span>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                {/* Current Conditions */}
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
+                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Current Conditions & Active Diagnoses</span>
+                  </div>
+                  <p className="text-slate-700 leading-relaxed font-medium">
+                    {patient.current_conditions || 'Stress-Induced Sinus Tachycardia • Under active clinical evaluation'}
+                  </p>
+                </div>
+
+                {/* Medical History */}
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
+                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Documented Medical & Surgical History</span>
+                  </div>
+                  <p className="text-slate-600 leading-relaxed">
+                    {patient.medical_history || 'No prior adverse cardiovascular hospitalizations or cardiac procedures recorded.'}
+                  </p>
+                </div>
+
+                {/* Known Allergies */}
+                <div className="p-3.5 bg-rose-50/60 rounded-xl border border-rose-200/80 space-y-1">
+                  <div className="font-bold text-rose-950 flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Known Drug Allergies & Contraindications</span>
+                  </div>
+                  <p className="text-rose-900 font-semibold leading-relaxed">
+                    {patient.allergies || 'No Known Drug Allergies (NKDA)'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Demographics, Contact & Care Team */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <User className="w-4 h-4 text-slate-600" />
+                  <h3 className="text-sm font-bold text-slate-900">Demographics & Contact Details</h3>
+                </div>
+
+                <div className="space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Patient ID:</span>
+                    <span className="font-mono font-bold text-slate-900 px-2 py-0.5 bg-slate-100 rounded">{patient.id}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Gender & Age:</span>
+                    <span className="font-semibold text-slate-800">{patient.gender || 'Not specified'}, {patient.age} yrs</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Date of Birth:</span>
+                    <span className="font-mono text-slate-800">{patient.date_of_birth}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Blood Group:</span>
+                    <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded">{patient.blood_group || 'O+'}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Primary Phone:</span>
+                    <span className="font-semibold text-slate-800">{patient.contact || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Emergency Phone:</span>
+                    <span className="font-semibold text-slate-800">{patient.emergency_contact || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Email Address:</span>
+                    <span className="text-slate-800 truncate max-w-[180px] font-medium">{patient.email}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-slate-500">Attending Physician:</span>
+                    <span className="font-semibold text-blue-700">{patient.doctor_name || 'Dr. Sarah Chen, MD'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/60 text-[11px] text-slate-500 flex items-center justify-between">
+                <span>Facility:</span>
+                <span className="font-bold text-slate-800">{patient.hospital_name || 'St. Jude Medical Center'}</span>
+              </div>
+            </div>
+          </div>
+
           {/* Key Metrics Quick Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
@@ -488,20 +599,20 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
             </div>
           )}
 
-          {/* Recent Daily Health Logs & Next Actions */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Daily Health Logs, Active Medications & Appointments Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Recent Symptoms & Log Snapshot */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                   <Activity className="w-4 h-4 text-teal-600" />
-                  <span>Latest Recorded Health Entry (Aug 27, 2026)</span>
+                  <span>Latest Telemetry & Vitals</span>
                 </div>
                 <button
                   onClick={() => setActiveTab('daily_health')}
                   className="text-xs text-blue-600 hover:underline font-semibold"
                 >
-                  View All Logs &rarr;
+                  View All &rarr;
                 </button>
               </div>
 
@@ -543,18 +654,28 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
                       )}
                     </div>
                   </div>
+
+                  <div className="pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setActiveTab('analytics')}
+                      className="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Open Health Analytics Graphs &rarr;</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-xs text-slate-400 py-4">No daily health records found.</div>
               )}
             </div>
 
-            {/* Active Prescriptions & Next Appointments */}
+            {/* Active Prescriptions & Medications */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                   <Pill className="w-4 h-4 text-emerald-600" />
-                  <span>Active Prescriptions ({prescriptions.filter((p: any) => p.status === 'active').length})</span>
+                  <span>Medications ({prescriptions.filter((p: any) => p.status === 'active').length} Active)</span>
                 </div>
                 <button
                   onClick={() => setActiveTab('prescriptions')}
@@ -581,6 +702,53 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                 <span className="text-slate-500 font-medium">Next Follow-up Consultation:</span>
                 <span className="font-bold text-blue-700">{patient.next_follow_up}</span>
+              </div>
+            </div>
+
+            {/* Scheduled Appointments */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-600" />
+                  <span>Consultations ({appointments.length})</span>
+                </div>
+                <button
+                  onClick={() => setActiveTab('appointments')}
+                  className="text-xs text-indigo-600 hover:underline font-semibold"
+                >
+                  All Appts &rarr;
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {appointments.slice(0, 3).map((appt: any) => (
+                  <div key={appt.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-slate-800">{appt.date} • {appt.time}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                        appt.status === 'scheduled' || appt.status === 'upcoming' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : appt.status === 'completed'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {appt.status}
+                      </span>
+                    </div>
+                    <div className="font-medium text-slate-900">{appt.purpose}</div>
+                    <div className="text-[11px] text-slate-500">Provider: {appt.doctor_name || 'Dr. Sarah Chen, MD'}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setShowAddApptModal(true)}
+                  className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-semibold text-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Book Consultation</span>
+                </button>
               </div>
             </div>
           </div>
@@ -721,168 +889,13 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
 
       {/* TAB 3: HEALTH ANALYTICS & CROSS-ANALYTICS */}
       {activeTab === 'analytics' && (
-        <div className="space-y-6">
-          {/* Time Range Selector */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Health Analytics & Physiological Telemetry</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Aggregated statistics across {patient.name}'s daily journal entries.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-              {(['7d', '14d', '30d', '90d'] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTimeRange(t)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    timeRange === t
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {t === '7d' ? '7 Days' : t === '14d' ? '14 Days' : t === '30d' ? '30 Days' : '90 Days'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Category Metric Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Sleep Card */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase">
-                <span className="flex items-center gap-1.5">
-                  <Moon className="w-4 h-4 text-indigo-600" />
-                  Sleep Duration
-                </span>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                  currentPeriodStats.sleep?.trend === 'up' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}>
-                  Trend: {currentPeriodStats.sleep?.trend === 'up' ? 'Improving' : 'Deficit'}
-                </span>
-              </div>
-              <div className="text-2xl font-extrabold text-slate-900">
-                {currentPeriodStats.sleep?.average || 6.5} <span className="text-sm font-normal text-slate-500">hrs/night</span>
-              </div>
-              <div className="text-xs text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
-                <span>Range: {currentPeriodStats.sleep?.min || 4.5}h - {currentPeriodStats.sleep?.max || 8.0}h</span>
-                <span>{currentPeriodStats.sleep?.qualityPercent || 75}% Good Quality</span>
-              </div>
-            </div>
-
-            {/* Stress Card */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase">
-                <span className="flex items-center gap-1.5">
-                  <Heart className="w-4 h-4 text-rose-600" />
-                  Autonomic Stress Index
-                </span>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                  currentPeriodStats.stress?.trend === 'down' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                }`}>
-                  Trend: {currentPeriodStats.stress?.trend === 'down' ? 'Easing' : 'Elevated'}
-                </span>
-              </div>
-              <div className="text-2xl font-extrabold text-slate-900">
-                {currentPeriodStats.stress?.average || 5.2} <span className="text-sm font-normal text-slate-500">/ 10</span>
-              </div>
-              <div className="text-xs text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
-                <span>Peak: {currentPeriodStats.stress?.highest || 9}/10</span>
-                <span>Low: {currentPeriodStats.stress?.lowest || 2}/10</span>
-              </div>
-            </div>
-
-            {/* Medication Adherence Card */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase">
-                <span className="flex items-center gap-1.5">
-                  <Pill className="w-4 h-4 text-emerald-600" />
-                  Medication Adherence
-                </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                  Target: &gt;85%
-                </span>
-              </div>
-              <div className="text-2xl font-extrabold text-slate-900">
-                {currentPeriodStats.medicationAdherence?.percent || 88}%
-              </div>
-              <div className="text-xs text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
-                <span>Doses: {currentPeriodStats.medicationAdherence?.dosesTaken || 21}/{currentPeriodStats.medicationAdherence?.dosesTotal || 24}</span>
-                <span>Missed: {currentPeriodStats.medicationAdherence?.dosesMissed || 3}</span>
-              </div>
-            </div>
-
-            {/* Activity Card */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase">
-                <span className="flex items-center gap-1.5">
-                  <Activity className="w-4 h-4 text-teal-600" />
-                  Physical Activity
-                </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-teal-100 text-teal-800">
-                  {currentPeriodStats.activity?.activityLevel || 'Moderate'}
-                </span>
-              </div>
-              <div className="text-2xl font-extrabold text-slate-900">
-                {currentPeriodStats.activity?.averageMinutes || 24} <span className="text-sm font-normal text-slate-500">mins/day</span>
-              </div>
-              <div className="text-xs text-slate-500 pt-1 border-t border-slate-100">
-                Endurance walking & light cardio routine
-              </div>
-            </div>
-
-            {/* Hydration Card */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-700 uppercase">
-                <span className="flex items-center gap-1.5">
-                  <Droplet className="w-4 h-4 text-cyan-600" />
-                  Daily Hydration
-                </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-cyan-100 text-cyan-800">
-                  Baseline
-                </span>
-              </div>
-              <div className="text-2xl font-extrabold text-slate-900">
-                {currentPeriodStats.hydration?.averageIntake || 7.4} <span className="text-sm font-normal text-slate-500">glasses</span>
-              </div>
-              <div className="text-xs text-slate-500 pt-1 border-t border-slate-100">
-                Variation: {currentPeriodStats.hydration?.dailyVariation || '± 1.2 glasses'}
-              </div>
-            </div>
-
-            {/* Symptoms Prevalence */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-              <div className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 text-amber-600" />
-                Active Symptoms Monitored
-              </div>
-              <div className="space-y-1 pt-1 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Palpitations Frequency:</span>
-                  <span className="font-bold text-slate-900">Reduced (1-2/wk)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Headache Intensity:</span>
-                  <span className="font-bold text-slate-900">Decreased to 1.2/10</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">Fatigue Index:</span>
-                  <span className="font-bold text-slate-900">Stabilized at 1.8/10</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Cross-Analytics Component */}
-          {crossAnalytics && (
-            <DoctorCrossAnalytics
-              dataPoints={crossAnalytics.dataPoints}
-              patientName={patient.name}
-            />
-          )}
-        </div>
+        <DoctorHealthAnalytics
+          patientId={patient.id}
+          patientName={patient.name}
+          initialChartData={patientData?.chartData}
+          initialAnalytics={patientData?.analytics}
+          initialCrossAnalytics={patientData?.crossAnalytics}
+        />
       )}
 
       {/* TAB 4: DAILY HEALTH RECORDS */}

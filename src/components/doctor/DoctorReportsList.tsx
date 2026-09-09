@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   FileText, 
   Search, 
@@ -43,7 +44,7 @@ export const DoctorReportsList: React.FC<ReportsProps> = ({ onSelectPatient }) =
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/doctor/reports');
+      const res = await authFetch('/api/doctor/reports');
       if (res.ok) {
         const data = await res.json();
         setReports(data.reports || []);

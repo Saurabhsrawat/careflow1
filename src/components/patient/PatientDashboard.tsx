@@ -94,6 +94,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigateTa
     }
   };
 
+  const activeJourney = dashboardData?.activeJourney || null;
   const currentJourney: JourneyEvent | null = dashboardData?.currentJourneyEvent || null;
   const upcomingAppt: Appointment | null = dashboardData?.upcomingAppointment || null;
   const tasks: Task[] = dashboardData?.tasks || [];
@@ -107,77 +108,125 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigateTa
   const currentStageIndex = allEvents.findIndex(e => e.status === 'current');
   const progressPercent = allEvents.length > 0 && currentStageIndex !== -1 
     ? Math.round(((currentStageIndex + 1) / allEvents.length) * 100)
-    : 75;
+    : allEvents.length > 0 ? 100 : 0;
 
   return (
     <div className="space-y-6">
       
       {/* 1. Welcome & Stage Status Banner */}
-      <div className="bg-gradient-to-br from-teal-900 via-slate-900 to-purple-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
-        {/* Glow backdrop */}
-        <div className="absolute right-0 top-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-semibold uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-                Active Care Journey
+      {activeJourney ? (
+        <div className="bg-gradient-to-br from-teal-900 via-slate-900 to-purple-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+          {/* Glow backdrop */}
+          <div className="absolute right-0 top-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="relative z-10 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-semibold uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                  Active Care Journey: {activeJourney.title}
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
+                  Welcome back, {user?.name || 'Alex Rivera'}
+                </h1>
+                <p className="text-slate-300 text-sm max-w-2xl">
+                  {currentJourney ? (
+                    <>You are currently in <strong className="text-teal-300">Stage: {currentJourney.stage}</strong> under the care of {currentJourney.doctor_name || 'Dr. Sarah Chen'} at {currentJourney.hospital_name || 'St. Jude Medical Center'}.</>
+                  ) : (
+                    <>Active care journey started on {activeJourney.start_date}.</>
+                  )}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onNavigateTab('care_history')}
+                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-xl border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <History className="w-4 h-4 text-teal-300" />
+                  Care History
+                </button>
+                <button
+                  onClick={() => onNavigateTab('health_recorder')}
+                  className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Heart className="w-4 h-4 fill-slate-950" />
+                  Log Today's Vitals
+                </button>
+              </div>
+            </div>
+
+            {/* Journey Progress Bar */}
+            <div className="bg-white/10 rounded-2xl p-4 sm:p-5 backdrop-blur-md border border-white/10 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold">
+                <div className="flex items-center gap-2">
+                  <span className="text-teal-300 font-bold">Current Milestone:</span>
+                  <span className="text-white font-bold text-sm">
+                    {currentJourney?.title || 'Initial Care Evaluation'}
+                  </span>
+                </div>
+                <div className="text-slate-300">
+                  Stage {currentStageIndex !== -1 ? currentStageIndex + 1 : allEvents.length} of {allEvents.length} ({progressPercent}% Completed)
+                </div>
+              </div>
+
+              <div className="w-full bg-slate-800/80 h-3 rounded-full overflow-hidden p-0.5 border border-white/10">
+                <div 
+                  className="bg-gradient-to-r from-emerald-400 via-teal-400 to-purple-400 h-full rounded-full transition-all duration-500 shadow-sm"
+                  style={{ width: `${Math.max(5, progressPercent)}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-emerald-300 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Single Active Journey Mode Active
+                </span>
+                <button
+                  onClick={() => onNavigateTab('journey')}
+                  className="text-teal-300 hover:text-teal-200 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  View Full Timeline <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* No Active Care Journey State */
+        <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-xs font-semibold uppercase tracking-wider">
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                No Active Care Journey
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
                 Welcome back, {user?.name || 'Alex Rivera'}
               </h1>
               <p className="text-slate-300 text-sm max-w-2xl">
-                You are currently in <strong className="text-teal-300">Stage 6: Treatment</strong> under the care of Dr. Sarah Chen at St. Jude Medical Center.
+                You currently do not have an active care journey. All prior health episodes, reports, and treatments are safely preserved in your personal Care History archive.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={() => onNavigateTab('health_recorder')}
+                onClick={() => onNavigateTab('care_history')}
                 className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
               >
-                <Heart className="w-4 h-4 fill-slate-950" />
-                Log Today's Vitals
+                <Plus className="w-4 h-4" />
+                Start New Care Journey
               </button>
-            </div>
-          </div>
-
-          {/* Journey Progress Bar */}
-          <div className="bg-white/10 rounded-2xl p-4 sm:p-5 backdrop-blur-md border border-white/10 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-semibold">
-              <div className="flex items-center gap-2">
-                <span className="text-teal-300 font-bold">Current Milestone:</span>
-                <span className="text-white font-bold text-sm">
-                  {currentJourney?.title || 'Metoprolol Protocol & Daily Health Logging'}
-                </span>
-              </div>
-              <div className="text-slate-300">
-                Stage {currentStageIndex !== -1 ? currentStageIndex + 1 : 6} of {allEvents.length || 8} ({progressPercent}% Completed)
-              </div>
-            </div>
-
-            <div className="w-full bg-slate-800/80 h-3 rounded-full overflow-hidden p-0.5 border border-white/10">
-              <div 
-                className="bg-gradient-to-r from-emerald-400 via-teal-400 to-purple-400 h-full rounded-full transition-all duration-500 shadow-sm"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-emerald-300 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Diagnosis Confirmed (Sinus Tachycardia)
-              </span>
               <button
-                onClick={() => onNavigateTab('journey')}
-                className="text-teal-300 hover:text-teal-200 font-bold flex items-center gap-1 hover:underline"
+                onClick={() => onNavigateTab('care_history')}
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-xl border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
               >
-                View Full Timeline <ArrowRight className="w-3 h-3" />
+                <History className="w-4 h-4 text-teal-300" />
+                View Care History
               </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Immediate Next Action Callout */}
       <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
@@ -188,20 +237,34 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigateTa
           <div>
             <div className="text-xs font-bold text-amber-900 uppercase tracking-wider">Next Clinical Action</div>
             <div className="text-sm font-bold text-slate-900 mt-0.5">
-              {currentJourney?.next_step || 'Follow-up appointment on Sep 2nd, 2026 for 2-week response review'}
+              {currentJourney?.next_step || (activeJourney ? 'Follow-up appointment on Sep 2nd, 2026' : 'Schedule a consultation or start a new journey if experiencing symptoms')}
             </div>
             <div className="text-xs text-slate-600 mt-0.5">
-              Keep logging your daily sleep, stress, and multi-dose vitals so Dr. Sarah Chen can correlate your rhythm data with treatment adherence.
+              {activeJourney ? (
+                <>Keep logging your daily sleep, stress, and multi-dose vitals so your doctor can correlate your rhythm data with treatment adherence.</>
+              ) : (
+                <>Log your daily vitals to maintain your wellness baseline or review past resolved episodes in My Care History.</>
+              )}
             </div>
           </div>
         </div>
 
-        <button
-          onClick={() => onNavigateTab('appointments')}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl whitespace-nowrap shadow-xs cursor-pointer"
-        >
-          View Appointment
-        </button>
+        {activeJourney ? (
+          <button
+            onClick={() => onNavigateTab('journey')}
+            className="px-4 py-2 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl transition shrink-0 flex items-center gap-1 cursor-pointer"
+          >
+            <span>Timeline</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <button
+            onClick={() => onNavigateTab('appointments')}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl whitespace-nowrap shadow-xs cursor-pointer"
+          >
+            Book Appointment
+          </button>
+        )}
       </div>
 
       {/* Main Dashboard 2-Column Grid */}
@@ -521,7 +584,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigateTa
                   <div className="text-xs text-slate-600 space-y-1 pt-1 border-t border-blue-200/60">
                     <div className="flex items-center gap-1.5">
                       <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
-                      <span>{upcomingAppt.doctor_name || 'Dr. Sarah Chen, MD'}</span>
+                      <span>{upcomingAppt.doctor_name || 'Attending Physician'}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5 text-slate-400" />

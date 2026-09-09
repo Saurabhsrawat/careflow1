@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   CheckSquare, 
   Search, 
@@ -38,7 +39,7 @@ export const DoctorTasksList: React.FC<TasksProps> = ({ onSelectPatient }) => {
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/doctor/tasks');
+      const res = await authFetch('/api/doctor/tasks');
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);

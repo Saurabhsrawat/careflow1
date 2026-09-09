@@ -17,6 +17,7 @@ import {
   ToggleRight
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { authFetch } from '../../utils/api';
 
 export const DoctorSettings: React.FC = () => {
   const { user, refreshUser } = useAuth();
@@ -58,7 +59,7 @@ export const DoctorSettings: React.FC = () => {
   const [prefsSaved, setPrefsSaved] = useState(false);
 
   useEffect(() => {
-    fetch('/api/doctor/profile')
+    authFetch('/api/doctor/profile')
       .then(res => res.json())
       .then(data => {
         if (data.profile) {
@@ -84,7 +85,7 @@ export const DoctorSettings: React.FC = () => {
       setProfileSaving(true);
       setProfileSuccess(false);
 
-      const res = await fetch('/api/doctor/profile', {
+      const res = await authFetch('/api/doctor/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,7 +124,7 @@ export const DoctorSettings: React.FC = () => {
 
     try {
       setPasswordSaving(true);
-      const res = await fetch('/api/doctor/change-password', {
+      const res = await authFetch('/api/doctor/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

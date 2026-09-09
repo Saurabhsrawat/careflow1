@@ -92,11 +92,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAuth }) => {
                 <button
                   onClick={() => quickLogin('dr.chen@stjude.org')}
                   className={`px-2 py-1 rounded transition-colors ${
-                    user.role === 'doctor' ? 'bg-white text-teal-700 font-semibold shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    user.role === 'doctor' && user.email === 'dr.chen@stjude.org' ? 'bg-white text-teal-700 font-semibold shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
-                  title="Switch to Dr. Sarah Chen (Doctor)"
+                  title="Switch to Dr. Sarah Chen (Cardiology - St. Jude)"
                 >
-                  Doctor
+                  Dr. Chen
+                </button>
+                <button
+                  onClick={() => quickLogin('dr.taylor@stjude.org')}
+                  className={`px-2 py-1 rounded transition-colors ${
+                    user.role === 'doctor' && user.email === 'dr.taylor@stjude.org' ? 'bg-white text-teal-700 font-semibold shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Switch to Dr. Robert Taylor (Emergency & Critical Care - St. Jude)"
+                >
+                  Dr. Taylor
+                </button>
+                <button
+                  onClick={() => quickLogin('dr.marcus@citygen.org')}
+                  className={`px-2 py-1 rounded transition-colors ${
+                    user.role === 'doctor' && user.email === 'dr.marcus@citygen.org' ? 'bg-white text-teal-700 font-semibold shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Switch to Dr. Marcus Vance (Neurology - City General Hospital)"
+                >
+                  Dr. Vance (City Gen)
                 </button>
                 <button
                   onClick={() => quickLogin('admin@stjude.org')}

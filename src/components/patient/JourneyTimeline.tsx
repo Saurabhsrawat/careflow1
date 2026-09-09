@@ -18,12 +18,18 @@ import {
   Layers,
   HeartPulse,
   Share2,
-  Info
+  Info,
+  History,
+  AlertCircle,
+  X,
+  ShieldCheck,
+  FolderArchive
 } from 'lucide-react';
-import { JourneyEvent, JourneyStage } from '../../types';
+import { JourneyEvent, JourneyStage, HealthcareJourney } from '../../types';
 
 interface JourneyTimelineProps {
   onStageSelect?: (stage: JourneyStage | string) => void;
+  onNavigateTab?: (tab: any) => void;
 }
 
 interface StageDetailData {
@@ -176,13 +182,25 @@ const DEFAULT_STAGE_DETAILS: Record<JourneyStage, StageDetailData> = {
   }
 };
 
-export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect }) => {
+export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect, onNavigateTab }) => {
+  const [journey, setJourney] = useState<HealthcareJourney | null>(null);
   const [events, setEvents] = useState<JourneyEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [filterStage, setFilterStage] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedStageDetail, setSelectedStageDetail] = useState<StageDetailData | null>(null);
+
+  // Lifecycle Modals
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [showNewJourneyModal, setShowNewJourneyModal] = useState(false);
+  const [resolveEndDate, setResolveEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [resolving, setResolving] = useState(false);
+  const [newJourneyTitle, setNewJourneyTitle] = useState('');
+  const [newJourneyCategory, setNewJourneyCategory] = useState('Cardiology');
+  const [newJourneyDate, setNewJourneyDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newJourneyDesc, setNewJourneyDesc] = useState('');
+  const [startingJourney, setStartingJourney] = useState(false);
 
   // New Event Form State
   const [newStage, setNewStage] = useState<JourneyStage>('Treatment');
@@ -210,6 +228,7 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect 
       });
       if (res.ok) {
         const data = await res.json();
+        setJourney(data.journey || null);
         setEvents(data.events || []);
         // Auto-expand current or latest completed event
         const current = data.events?.find((e: any) => e.status === 'current');
@@ -226,6 +245,66 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect 
   useEffect(() => {
     fetchJourney();
   }, []);
+
+  const handleResolveJourney = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!journey) return;
+    try {
+      setResolving(true);
+      const res = await fetch('/api/patient/journey/resolve', {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          journey_id: journey.id,
+          end_date: resolveEndDate
+        })
+      });
+      if (res.ok) {
+        setShowResolveModal(false);
+        await fetchJourney();
+      }
+    } catch (err) {
+      console.error('Failed to resolve care journey:', err);
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  const handleStartNewJourney = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newJourneyTitle.trim()) return;
+    try {
+      setStartingJourney(true);
+      const res = await fetch('/api/patient/journeys', {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: newJourneyTitle.trim(),
+          category: newJourneyCategory,
+          start_date: newJourneyDate,
+          initial_description: newJourneyDesc.trim()
+        })
+      });
+      if (res.ok) {
+        setShowNewJourneyModal(false);
+        setNewJourneyTitle('');
+        setNewJourneyDesc('');
+        await fetchJourney();
+      }
+    } catch (err) {
+      console.error('Failed to create new journey:', err);
+    } finally {
+      setStartingJourney(false);
+    }
+  };
 
   const handleOpenStageDetail = (stageName: JourneyStage | string) => {
     const defaultData = DEFAULT_STAGE_DETAILS[stageName as JourneyStage] || {
@@ -389,30 +468,209 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect 
     ? Math.round(((currentStageIndex + 1) / events.length) * 100)
     : 75;
 
+  if (!loading && (!journey || events.length === 0)) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 sm:p-12 text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-teal-50 border border-teal-200 text-teal-600 flex items-center justify-center mx-auto">
+            <ShieldCheck className="w-8 h-8" />
+          </div>
+          <div className="space-y-2 max-w-md mx-auto">
+            <h2 className="text-2xl font-extrabold text-slate-900">No Active Care Journey</h2>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              You currently have no ongoing healthcare episodes. All past episodes, reports, and treatments are safely preserved in your Care History.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setShowNewJourneyModal(true)}
+              className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Start New Care Journey
+            </button>
+            {onNavigateTab && (
+              <button
+                onClick={() => onNavigateTab('care_history')}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-sm rounded-xl transition flex items-center gap-2 cursor-pointer"
+              >
+                <History className="w-4 h-4 text-teal-600" />
+                View My Care History
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Start New Journey Modal */}
+        {showNewJourneyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Start New Care Journey</h3>
+                    <p className="text-xs text-slate-500">Initiate a distinct healthcare episode</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowNewJourneyModal(false)}
+                  className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleStartNewJourney} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Journey Label / Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sprained Ankle Rehab, Migraine Care, Dermatology Evaluation"
+                    value={newJourneyTitle}
+                    onChange={(e) => setNewJourneyTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Care Category
+                    </label>
+                    <select
+                      value={newJourneyCategory}
+                      onChange={(e) => setNewJourneyCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                    >
+                      <option value="Cardiology">Cardiology</option>
+                      <option value="Orthopedics & Sports Medicine">Orthopedics & Sports Medicine</option>
+                      <option value="Neurology">Neurology</option>
+                      <option value="Dermatology">Dermatology</option>
+                      <option value="General Medicine">General Medicine</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={newJourneyDate}
+                      onChange={(e) => setNewJourneyDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Initial Symptoms & Reason for Care
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe initial symptoms or reason for starting this care episode..."
+                    value={newJourneyDesc}
+                    onChange={(e) => setNewJourneyDesc(e.target.value)}
+                    className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewJourneyModal(false)}
+                    className="px-4 py-2 text-slate-700 font-semibold text-xs rounded-xl hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={startingJourney || !newJourneyTitle.trim()}
+                    className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {startingJourney ? 'Starting...' : 'Start Care Journey'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header & Stage Progress Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 uppercase tracking-wider mb-2">
-              <Layers className="w-3.5 h-3.5 text-teal-600" />
-              Patient Care Journey
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 uppercase tracking-wider">
+                <Layers className="w-3.5 h-3.5 text-teal-600" />
+                Active Care Journey
+              </span>
+              {journey?.category && (
+                <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                  {journey.category}
+                </span>
+              )}
+              {journey?.start_date && (
+                <span className="text-xs text-slate-400 font-mono">
+                  Started {journey.start_date}
+                </span>
+              )}
             </div>
-            <h2 className="text-xl font-bold text-slate-900">
-              Cardiology Healthcare Journey Timeline
+            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900">
+              {journey?.title || 'Cardiology Healthcare Journey Timeline'}
             </h2>
             <p className="text-sm text-slate-500 mt-1">
-              Follow your continuous healthcare path from initial symptoms to diagnostic tests, active treatment, and long-term recovery.
+              Active continuous healthcare path with clinical milestones, test analyses, and doctor care directives.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowResolveModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              title="Resolve and archive this care journey"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              Resolve Journey
+            </button>
+
+            <button
+              onClick={() => setShowNewJourneyModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              title="Start a new care journey episode"
+            >
+              <Plus className="w-3.5 h-3.5 text-slate-600" />
+              Start New Journey
+            </button>
+
+            {onNavigateTab && (
+              <button
+                onClick={() => onNavigateTab('care_history')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                title="View past care journeys"
+              >
+                <History className="w-3.5 h-3.5 text-purple-600" />
+                Care History
+              </button>
+            )}
+
             <button
               onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               Add Milestone Note
             </button>
           </div>
@@ -482,9 +740,37 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect 
             const isExpanded = expandedEventId === event.id;
             const isCurrent = event.status === 'current';
             const isCompleted = event.status === 'completed';
+            const prevEvent = index > 0 ? events[index - 1] : null;
+            const isCareTransfer = prevEvent && 
+              event.hospital_name && 
+              prevEvent.hospital_name && 
+              event.hospital_name.trim().toLowerCase() !== prevEvent.hospital_name.trim().toLowerCase();
 
             return (
               <div key={event.id} className="relative group">
+                {/* Care Transfer Visual Marker WITHIN Single Active Journey */}
+                {isCareTransfer && (
+                  <div className="mb-6 -ml-2 sm:-ml-4 p-3.5 sm:p-4 bg-gradient-to-r from-amber-50 to-orange-50/80 border-2 border-amber-300 rounded-2xl shadow-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                          <span>Care Transfer Within Journey</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                        </div>
+                        <div className="text-xs font-bold text-slate-900 mt-0.5 truncate">
+                          Transferred from <span className="text-amber-900 font-semibold">{prevEvent.hospital_name}</span> to <span className="text-teal-900 font-semibold">{event.hospital_name}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-amber-200/80 text-amber-900 shrink-0 hidden sm:inline-block">
+                      Inter-Hospital Episode
+                    </span>
+                  </div>
+                )}
+
                 {/* Timeline node icon */}
                 <div 
                   className={`absolute -left-6 sm:-left-8 top-1.5 w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center transition-all ${getStageColor(event.status)}`}
@@ -917,6 +1203,177 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect 
                 Close Details
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolve Journey Modal */}
+      {showResolveModal && journey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Resolve Care Journey</h3>
+                <p className="text-xs text-slate-500">Conclude this clinical episode</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <p>
+                Marking <strong>"{journey.title}"</strong> as resolved will close this episode and move its complete history and milestones into your Care History.
+              </p>
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200">
+                <span>Started: {journey.start_date}</span>
+                <span>Category: {journey.category || 'Clinical Care'}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleResolveJourney} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Resolution Date *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={resolveEndDate}
+                  onChange={(e) => setResolveEndDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowResolveModal(false)}
+                  className="px-4 py-2 text-slate-700 font-semibold text-xs rounded-xl hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resolving}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer"
+                >
+                  {resolving ? 'Resolving...' : 'Confirm Resolution'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Start New Journey Modal (when already on active journey view) */}
+      {showNewJourneyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Start New Care Journey</h3>
+                  <p className="text-xs text-slate-500">Initiate a separate healthcare episode</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowNewJourneyModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {journey && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold">Active Journey Scoping:</strong>
+                  Only one care journey may be active at a time. Starting a new journey will resolve and archive your ongoing journey (<span className="font-semibold">"{journey.title}"</span>).
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleStartNewJourney} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Journey Label / Episode Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sprained Ankle Rehab, Migraine Care, Dermatology Evaluation"
+                  value={newJourneyTitle}
+                  onChange={(e) => setNewJourneyTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Care Category
+                  </label>
+                  <select
+                    value={newJourneyCategory}
+                    onChange={(e) => setNewJourneyCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                  >
+                    <option value="Cardiology">Cardiology</option>
+                    <option value="Orthopedics & Sports Medicine">Orthopedics & Sports Medicine</option>
+                    <option value="Neurology">Neurology</option>
+                    <option value="Dermatology">Dermatology</option>
+                    <option value="General Medicine">General Medicine</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={newJourneyDate}
+                    onChange={(e) => setNewJourneyDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Initial Symptoms & Reason for Care
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Describe initial symptoms or clinical context for this new journey..."
+                  value={newJourneyDesc}
+                  onChange={(e) => setNewJourneyDesc(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowNewJourneyModal(false)}
+                  className="px-4 py-2 text-slate-700 font-semibold text-xs rounded-xl hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={startingJourney || !newJourneyTitle.trim()}
+                  className="px-5 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer"
+                >
+                  {startingJourney ? 'Starting...' : 'Start Care Journey'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

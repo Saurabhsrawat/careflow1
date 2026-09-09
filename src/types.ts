@@ -30,12 +30,16 @@ export interface PatientProfile {
   id: string;
   user_id: string;
   date_of_birth?: string;
+  gender?: string;
   contact?: string;
   emergency_contact?: string;
   blood_group?: string;
   current_stage: JourneyStage | string;
   doctor_id?: string;
   hospital_id?: string;
+  medical_history?: string;
+  current_conditions?: string;
+  allergies?: string;
   assigned_doctor_name?: string;
   assigned_doctor_specialization?: string;
   created_at?: string;
@@ -64,9 +68,26 @@ export interface User {
   doctor?: DoctorProfile | null;
 }
 
+export interface HealthcareJourney {
+  id: string;
+  patient_id: string;
+  title: string;
+  status: 'active' | 'resolved' | 'closed';
+  start_date: string;
+  end_date?: string | null;
+  category?: string;
+  resolving_doctor_name?: string;
+  resolving_hospital_name?: string;
+  events_count?: number;
+  events?: JourneyEvent[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface JourneyEvent {
   id: string;
   patient_id: string;
+  journey_id?: string;
   stage: JourneyStage | string;
   title: string;
   description?: string;
@@ -129,11 +150,15 @@ export interface DoctorPatientSummary {
   name: string;
   email: string;
   age?: number;
+  gender?: string;
   date_of_birth?: string;
   contact?: string;
   emergency_contact?: string;
   blood_group?: string;
   current_stage: string;
+  medical_history?: string;
+  current_conditions?: string;
+  allergies?: string;
   doctor_id: string;
   doctor_name?: string;
   hospital_id: string;
@@ -193,6 +218,19 @@ export interface MedicalReport {
   created_at?: string;
 }
 
+export interface AvailableDoctor {
+  id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  specialization: string;
+  hospital_id: string;
+  hospital_name: string;
+  hospital_address?: string;
+  is_active: number;
+  is_primary?: boolean | number;
+}
+
 export interface Appointment {
   id: string;
   patient_id: string;
@@ -204,7 +242,10 @@ export interface Appointment {
   status: AppointmentStatus;
   notes?: string;
   doctor_name?: string;
+  doctor_specialization?: string;
   hospital_name?: string;
+  hospital_address?: string;
+  hospital_phone?: string;
   patient_name?: string;
   created_at?: string;
 }

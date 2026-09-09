@@ -70,6 +70,7 @@ router.post('/reset', async (req: Request, res: Response) => {
       DROP TABLE IF EXISTS prescriptions;
       DROP TABLE IF EXISTS clinical_notes;
       DROP TABLE IF EXISTS journey_events;
+      DROP TABLE IF EXISTS journeys;
       DROP TABLE IF EXISTS doctors;
       DROP TABLE IF EXISTS patients;
       DROP TABLE IF EXISTS users;

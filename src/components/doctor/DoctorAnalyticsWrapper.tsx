@@ -11,6 +11,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { DoctorCrossAnalytics } from './DoctorCrossAnalytics';
+import { DoctorHealthAnalytics } from './DoctorHealthAnalytics';
+import { authFetch } from '../../utils/api';
 
 interface DoctorAnalyticsWrapperProps {
   onSelectPatient: (patientId: string) => void;
@@ -23,7 +25,7 @@ export const DoctorAnalyticsWrapper: React.FC<DoctorAnalyticsWrapperProps> = ({ 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/doctor/patients')
+    authFetch('/api/doctor/patients')
       .then(res => res.json())
       .then(data => {
         if (data.patients && data.patients.length > 0) {
@@ -39,7 +41,7 @@ export const DoctorAnalyticsWrapper: React.FC<DoctorAnalyticsWrapperProps> = ({ 
   useEffect(() => {
     if (!selectedPatientId) return;
     setLoading(true);
-    fetch(`/api/doctor/patients/${selectedPatientId}`)
+    authFetch(`/api/doctor/patients/${selectedPatientId}`)
       .then(res => res.json())
       .then(data => {
         setPatientData(data);
@@ -126,18 +128,15 @@ export const DoctorAnalyticsWrapper: React.FC<DoctorAnalyticsWrapperProps> = ({ 
         </div>
       )}
 
-      {/* Cross Analytics Component */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-teal-500 border-t-transparent"></div>
-          <p className="text-sm font-medium text-slate-600 mt-3">Computing longitudinal correlations...</p>
-        </div>
-      ) : (
-        <DoctorCrossAnalytics
-          dataPoints={dataPoints}
-          patientName={selectedPatient?.name || 'Patient'}
-        />
-      )}
+      {/* Longitudinal Telemetry Charts & Cross Analytics */}
+      <DoctorHealthAnalytics
+        key={selectedPatientId}
+        patientId={selectedPatientId}
+        patientName={selectedPatient?.name || 'Patient'}
+        initialChartData={patientData?.chartData}
+        initialAnalytics={patientData?.analytics}
+        initialCrossAnalytics={patientData?.crossAnalytics}
+      />
     </div>
   );
 };

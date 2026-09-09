@@ -416,7 +416,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, initialMode, onClo
               <Stethoscope className="w-3.5 h-3.5 text-blue-600 shrink-0" />
               <div className="truncate">
                 <div className="font-semibold truncate">Dr. S. Chen</div>
-                <div className="text-[10px] text-blue-600">Doctor</div>
+                <div className="text-[10px] text-blue-600">Doctor (Cardio)</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleQuickFill('dr.taylor@stjude.org')}
+              className="px-2.5 py-1.5 rounded-lg border border-cyan-200 bg-white hover:bg-cyan-50 text-cyan-800 text-xs font-medium text-left flex items-center gap-1.5 transition-colors"
+            >
+              <Stethoscope className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+              <div className="truncate">
+                <div className="font-semibold truncate">Dr. R. Taylor</div>
+                <div className="text-[10px] text-cyan-600">Doctor (ER)</div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleQuickFill('dr.marcus@citygen.org')}
+              className="px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-800 text-xs font-medium text-left flex items-center gap-1.5 transition-colors"
+            >
+              <Stethoscope className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <div className="truncate">
+                <div className="font-semibold truncate">Dr. M. Vance</div>
+                <div className="text-[10px] text-indigo-600">City Gen (Neuro)</div>
               </div>
             </button>
 

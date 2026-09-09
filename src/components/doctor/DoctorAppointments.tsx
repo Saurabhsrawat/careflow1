@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   Calendar, 
   Clock, 
@@ -37,7 +38,7 @@ export const DoctorAppointments: React.FC<AppointmentsProps> = ({ onSelectPatien
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/doctor/appointments');
+      const res = await authFetch('/api/doctor/appointments');
       if (res.ok) {
         const data = await res.json();
         setAppointments(data.appointments || []);
@@ -51,7 +52,7 @@ export const DoctorAppointments: React.FC<AppointmentsProps> = ({ onSelectPatien
 
   const fetchPatients = async () => {
     try {
-      const res = await fetch('/api/doctor/patients');
+      const res = await authFetch('/api/doctor/patients');
       if (res.ok) {
         const data = await res.json();
         setAssignedPatients(data.patients || []);
@@ -68,7 +69,7 @@ export const DoctorAppointments: React.FC<AppointmentsProps> = ({ onSelectPatien
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      await fetch(`/api/doctor/appointments/${id}`, {
+      await authFetch(`/api/doctor/appointments/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -82,7 +83,7 @@ export const DoctorAppointments: React.FC<AppointmentsProps> = ({ onSelectPatien
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/doctor/appointments', {
+      const res = await authFetch('/api/doctor/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
@@ -104,6 +105,7 @@ export const DoctorAppointments: React.FC<AppointmentsProps> = ({ onSelectPatien
   };
 
   const todayDate = '2026-08-27';
+  const currentDate = new Date().toISOString().split('T')[0];
 
   const filteredAppointments = appointments.filter((a: any) => {
     const matchesSearch = 
@@ -111,8 +113,8 @@ export const DoctorAppointments: React.FC<AppointmentsProps> = ({ onSelectPatien
       (a.purpose || '').toLowerCase().includes(search.toLowerCase());
 
     let matchesFilter = true;
-    if (filter === 'today') matchesFilter = a.date === todayDate;
-    else if (filter === 'upcoming') matchesFilter = a.date >= todayDate && a.status === 'upcoming';
+    if (filter === 'today') matchesFilter = a.date === todayDate || a.date === currentDate;
+    else if (filter === 'upcoming') matchesFilter = a.status === 'upcoming';
     else if (filter === 'completed') matchesFilter = a.status === 'completed';
     else if (filter === 'cancelled') matchesFilter = a.status === 'cancelled';
 

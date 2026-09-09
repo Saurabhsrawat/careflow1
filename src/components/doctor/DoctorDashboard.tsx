@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   Users, 
   Calendar, 
@@ -35,8 +36,8 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ onSelectPatien
     try {
       setLoading(true);
       const [dashRes, patRes] = await Promise.all([
-        fetch('/api/doctor/dashboard'),
-        fetch('/api/doctor/patients')
+        authFetch('/api/doctor/dashboard'),
+        authFetch('/api/doctor/patients')
       ]);
 
       if (dashRes.ok) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   FileText, 
   User, 
@@ -76,8 +77,8 @@ export const DoctorConsultations: React.FC<ConsultationsProps> = ({ onSelectPati
     try {
       setLoading(true);
       const [res, patRes] = await Promise.all([
-        fetch('/api/doctor/consultations'),
-        fetch('/api/doctor/patients')
+        authFetch('/api/doctor/consultations'),
+        authFetch('/api/doctor/patients')
       ]);
 
       if (res.ok) {
@@ -109,7 +110,7 @@ export const DoctorConsultations: React.FC<ConsultationsProps> = ({ onSelectPati
 
     try {
       setSubmitting(true);
-      const res = await fetch('/api/doctor/consultations', {
+      const res = await authFetch('/api/doctor/consultations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

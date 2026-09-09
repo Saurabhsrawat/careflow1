@@ -14,11 +14,14 @@ import {
   Phone,
   ArrowRight
 } from 'lucide-react';
-import { Appointment, AppointmentStatus } from '../../types';
+import { Appointment, AppointmentStatus, AvailableDoctor } from '../../types';
 
 export const AppointmentsManager: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [availableDoctors, setAvailableDoctors] = useState<AvailableDoctor[]>([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'completed' | 'cancelled'>('upcoming');
   const [showBookModal, setShowBookModal] = useState(false);
 
@@ -56,9 +59,41 @@ export const AppointmentsManager: React.FC = () => {
     }
   };
 
+  const fetchDoctors = async () => {
+    try {
+      setLoadingDoctors(true);
+      const res = await fetch('/api/patient/doctors', {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const docs: AvailableDoctor[] = data.doctors || [];
+        setAvailableDoctors(docs);
+        if (docs.length > 0) {
+          setSelectedDoctorId(prev => {
+            if (prev && docs.some(d => d.id === prev)) return prev;
+            const primary = docs.find(d => d.is_primary) || docs[0];
+            return primary ? primary.id : docs[0].id;
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load available doctors:', err);
+    } finally {
+      setLoadingDoctors(false);
+    }
+  };
+
   useEffect(() => {
     fetchAppointments();
+    fetchDoctors();
   }, []);
+
+  const handleOpenBookModal = () => {
+    fetchDoctors();
+    setShowBookModal(true);
+  };
 
   const handleCancelAppointment = async (id: string) => {
     if (!window.confirm('Are you sure you want to cancel this appointment?')) return;
@@ -79,7 +114,7 @@ export const AppointmentsManager: React.FC = () => {
 
   const handleBookSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookDate || !bookTime || !bookPurpose) return;
+    if (!bookDate || !bookTime || !bookPurpose || !selectedDoctorId) return;
     try {
       setSubmitting(true);
       const res = await fetch('/api/patient/appointments', {
@@ -87,6 +122,7 @@ export const AppointmentsManager: React.FC = () => {
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         body: JSON.stringify({
+          doctor_id: selectedDoctorId,
           date: bookDate,
           time: bookTime,
           purpose: bookPurpose,
@@ -98,6 +134,9 @@ export const AppointmentsManager: React.FC = () => {
         setBookDate('');
         setBookNotes('');
         await fetchAppointments();
+      } else {
+        const errData = await res.json();
+        alert(errData.error || 'Failed to book appointment');
       }
     } catch (err) {
       console.error('Failed to book appointment:', err);
@@ -105,6 +144,19 @@ export const AppointmentsManager: React.FC = () => {
       setSubmitting(false);
     }
   };
+
+  const selectedDoctor = availableDoctors.find(d => d.id === selectedDoctorId);
+
+  // Group available doctors by hospital so patients can easily scan facilities and specialists
+  const doctorsByHospital = React.useMemo(() => {
+    const groups: Record<string, AvailableDoctor[]> = {};
+    availableDoctors.forEach(doc => {
+      const hosp = doc.hospital_name || 'Affiliated Medical Facility';
+      if (!groups[hosp]) groups[hosp] = [];
+      groups[hosp].push(doc);
+    });
+    return groups;
+  }, [availableDoctors]);
 
   const filteredAppointments = appointments.filter(a => {
     if (activeTab === 'upcoming') return a.status === 'upcoming';
@@ -126,12 +178,12 @@ export const AppointmentsManager: React.FC = () => {
             Care Appointments & Consultations
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Manage your in-person clinic visits and diagnostic follow-up sessions with Dr. Sarah Chen.
+            Manage your in-person clinic visits and diagnostic follow-up sessions with your care team.
           </p>
         </div>
 
         <button
-          onClick={() => setShowBookModal(true)}
+          onClick={handleOpenBookModal}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -227,11 +279,18 @@ export const AppointmentsManager: React.FC = () => {
                     <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
                       <span className="flex items-center gap-1">
                         <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
-                        <strong>{appt.doctor_name || 'Dr. Sarah Chen, MD'}</strong> ({appt.notes ? 'Cardiology' : 'Specialist'})
+                        <strong>{appt.doctor_name || 'Attending Physician'}</strong>
+                        {appt.doctor_specialization ? (
+                          <span className="text-slate-500">({appt.doctor_specialization})</span>
+                        ) : appt.notes ? (
+                          <span className="text-slate-500">(Cardiology)</span>
+                        ) : (
+                          <span className="text-slate-500">(Clinical Staff)</span>
+                        )}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{appt.hospital_name || 'St. Jude Medical Center'} • Suite 400</span>
+                        <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{appt.hospital_name || 'Medical Center'}{appt.hospital_address ? ` • ${appt.hospital_address}` : ''}</span>
                       </span>
                     </div>
 
@@ -281,13 +340,73 @@ export const AppointmentsManager: React.FC = () => {
 
             <form onSubmit={handleBookSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Consulting Physician</label>
-                <input
-                  type="text"
-                  disabled
-                  value="Dr. Sarah Chen, MD (Cardiology & Internal Medicine)"
-                  className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 font-semibold"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="appointment-doctor-select" className="text-xs font-semibold text-slate-700">
+                    Consulting Physician <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    All Participating Facilities & Specialists
+                  </span>
+                </div>
+
+                {loadingDoctors ? (
+                  <div className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-500 flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <span>Loading physicians across facilities...</span>
+                  </div>
+                ) : availableDoctors.length === 0 ? (
+                  <div className="w-full bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs text-rose-700">
+                    No physicians found.
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <select
+                      id="appointment-doctor-select"
+                      required
+                      value={selectedDoctorId}
+                      onChange={(e) => setSelectedDoctorId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all cursor-pointer"
+                    >
+                      {(Object.entries(doctorsByHospital) as [string, AvailableDoctor[]][]).map(([hospitalName, docs]) => (
+                        <optgroup key={hospitalName} label={`🏥 ${hospitalName}`}>
+                          {docs.map((doc) => (
+                            <option key={doc.id} value={doc.id}>
+                              {doc.name} — {doc.specialization}{doc.is_primary ? ' [Your Primary Doctor]' : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+
+                    {/* Selected Doctor Live Details Card */}
+                    {selectedDoctor && (
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900">
+                            <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
+                            <span>{selectedDoctor.name}</span>
+                          </div>
+                          {selectedDoctor.is_primary ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                              Assigned Primary Doctor
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Specialist Consultation
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-600">
+                          <span className="font-semibold text-slate-700">Specialty:</span> {selectedDoctor.specialization}
+                        </div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                          <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{selectedDoctor.hospital_name || 'Medical Facility'}{selectedDoctor.hospital_address ? ` • ${selectedDoctor.hospital_address}` : ''}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

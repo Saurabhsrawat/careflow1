@@ -41,19 +41,27 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       WHERE p.id = ?
     `, [patientId]);
 
-    // Journey stages & active progress
-    const journeyEvents = queryAll(`
-      SELECT j.*, u_doc.name as doctor_name, h.name as hospital_name
-      FROM journey_events j
-      LEFT JOIN doctors d ON j.doctor_id = d.id
-      LEFT JOIN users u_doc ON d.user_id = u_doc.id
-      LEFT JOIN hospitals h ON j.hospital_id = h.id
-      WHERE j.patient_id = ?
-      ORDER BY j.date ASC
+    // Active Care Journey & events
+    const activeJourney = queryOne(`
+      SELECT * FROM journeys WHERE patient_id = ? AND status = 'active' LIMIT 1
     `, [patientId]);
 
-    // Current active journey event
-    const currentJourneyEvent = journeyEvents.find((e: any) => e.status === 'current') || journeyEvents[journeyEvents.length - 1];
+    let journeyEvents: any[] = [];
+    let currentJourneyEvent: any = null;
+
+    if (activeJourney) {
+      journeyEvents = queryAll(`
+        SELECT j.*, u_doc.name as doctor_name, h.name as hospital_name
+        FROM journey_events j
+        LEFT JOIN doctors d ON j.doctor_id = d.id
+        LEFT JOIN users u_doc ON d.user_id = u_doc.id
+        LEFT JOIN hospitals h ON j.hospital_id = h.id
+        WHERE j.journey_id = ?
+        ORDER BY j.date ASC
+      `, [activeJourney.id]);
+
+      currentJourneyEvent = journeyEvents.find((e: any) => e.status === 'current') || journeyEvents[journeyEvents.length - 1] || null;
+    }
 
     // Upcoming appointment
     const upcomingAppointment = queryOne(`
@@ -165,6 +173,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
     return res.json({
       profile,
+      activeJourney: activeJourney || null,
       journeyEvents,
       currentJourneyEvent,
       upcomingAppointment,
@@ -180,12 +189,153 @@ router.get('/dashboard', async (req: Request, res: Response) => {
   }
 });
 
-// 2. Healthcare Journey Timeline
+// 2. Healthcare Journey Timeline & Multi-Journey Management
 router.get('/journey', async (req: Request, res: Response) => {
   try {
     await getDb();
     const patientId = getPatientId(req);
     if (!patientId) return res.status(404).json({ error: 'Patient not found' });
+
+    // Fetch all journeys for this patient
+    const allJourneys = queryAll(`
+      SELECT j.*, (SELECT count(*) FROM journey_events ev WHERE ev.journey_id = j.id) as events_count
+      FROM journeys j
+      WHERE j.patient_id = ?
+      ORDER BY j.start_date DESC
+    `, [patientId]);
+
+    // Enrich each journey with resolving/latest doctor and hospital name
+    allJourneys.forEach((jn: any) => {
+      const lastEv = queryOne(`
+        SELECT ev.*, u_doc.name as doctor_name, h.name as hospital_name
+        FROM journey_events ev
+        LEFT JOIN doctors d ON ev.doctor_id = d.id
+        LEFT JOIN users u_doc ON d.user_id = u_doc.id
+        LEFT JOIN hospitals h ON ev.hospital_id = h.id
+        WHERE ev.journey_id = ?
+        ORDER BY ev.date DESC LIMIT 1
+      `, [jn.id]);
+      if (lastEv) {
+        jn.resolving_doctor_name = lastEv.doctor_name;
+        jn.resolving_hospital_name = lastEv.hospital_name;
+      }
+    });
+
+    const activeJourney = allJourneys.find((j: any) => j.status === 'active') || null;
+    const requestedJourneyId = req.query.journey_id as string;
+    let targetJourney: any = null;
+
+    if (requestedJourneyId) {
+      targetJourney = allJourneys.find((j: any) => j.id === requestedJourneyId) || null;
+    } else {
+      targetJourney = activeJourney;
+    }
+
+    let enrichedEvents: any[] = [];
+    if (targetJourney) {
+      const events = queryAll(`
+        SELECT j.*, 
+               u_doc.name as doctor_name, 
+               d.specialization as doctor_specialization,
+               h.name as hospital_name, 
+               h.address as hospital_address
+        FROM journey_events j
+        LEFT JOIN doctors d ON j.doctor_id = d.id
+        LEFT JOIN users u_doc ON d.user_id = u_doc.id
+        LEFT JOIN hospitals h ON j.hospital_id = h.id
+        WHERE j.journey_id = ?
+        ORDER BY j.date ASC
+      `, [targetJourney.id]);
+
+      // Attach linked reports and tasks to each journey stage
+      enrichedEvents = events.map((ev: any) => {
+        const reports = queryAll(`
+          SELECT id, name, type, date, file FROM medical_reports 
+          WHERE patient_id = ? AND journey_stage = ?
+        `, [patientId, ev.stage]);
+
+        const tasks = queryAll(`
+          SELECT id, title, status, due_date FROM tasks 
+          WHERE patient_id = ? AND related_journey_event_id = ?
+        `, [patientId, ev.id]);
+
+        return {
+          ...ev,
+          reports,
+          tasks,
+        };
+      });
+    }
+
+    return res.json({
+      journey: targetJourney,
+      events: enrichedEvents,
+      allJourneys,
+      activeJourney,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all journeys for patient (for "My Care History" page)
+router.get('/journeys', async (req: Request, res: Response) => {
+  try {
+    await getDb();
+    const patientId = getPatientId(req);
+    if (!patientId) return res.status(404).json({ error: 'Patient not found' });
+
+    const journeys = queryAll(`
+      SELECT j.*, (SELECT count(*) FROM journey_events ev WHERE ev.journey_id = j.id) as events_count
+      FROM journeys j
+      WHERE j.patient_id = ?
+      ORDER BY j.start_date DESC
+    `, [patientId]);
+
+    journeys.forEach((jn: any) => {
+      const lastEv = queryOne(`
+        SELECT ev.*, u_doc.name as doctor_name, h.name as hospital_name
+        FROM journey_events ev
+        LEFT JOIN doctors d ON ev.doctor_id = d.id
+        LEFT JOIN users u_doc ON d.user_id = u_doc.id
+        LEFT JOIN hospitals h ON ev.hospital_id = h.id
+        WHERE ev.journey_id = ?
+        ORDER BY ev.date DESC LIMIT 1
+      `, [jn.id]);
+      if (lastEv) {
+        jn.resolving_doctor_name = lastEv.doctor_name;
+        jn.resolving_hospital_name = lastEv.hospital_name;
+      }
+    });
+
+    const activeJourney = journeys.find((j: any) => j.status === 'active') || null;
+    const resolvedJourneys = journeys.filter((j: any) => j.status !== 'active');
+
+    return res.json({
+      journeys,
+      activeJourney,
+      resolvedJourneys,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Get specific journey details and historical events
+router.get('/journeys/:journeyId', async (req: Request, res: Response) => {
+  try {
+    await getDb();
+    const patientId = getPatientId(req);
+    if (!patientId) return res.status(404).json({ error: 'Patient not found' });
+    const { journeyId } = req.params;
+
+    const journey = queryOne(`
+      SELECT * FROM journeys WHERE id = ? AND patient_id = ?
+    `, [journeyId, patientId]);
+
+    if (!journey) {
+      return res.status(404).json({ error: 'Care journey not found' });
+    }
 
     const events = queryAll(`
       SELECT j.*, 
@@ -197,11 +347,10 @@ router.get('/journey', async (req: Request, res: Response) => {
       LEFT JOIN doctors d ON j.doctor_id = d.id
       LEFT JOIN users u_doc ON d.user_id = u_doc.id
       LEFT JOIN hospitals h ON j.hospital_id = h.id
-      WHERE j.patient_id = ?
+      WHERE j.journey_id = ?
       ORDER BY j.date ASC
-    `, [patientId]);
+    `, [journeyId]);
 
-    // Attach linked reports and tasks to each journey stage
     const enrichedEvents = events.map((ev: any) => {
       const reports = queryAll(`
         SELECT id, name, type, date, file FROM medical_reports 
@@ -220,7 +369,139 @@ router.get('/journey', async (req: Request, res: Response) => {
       };
     });
 
-    return res.json({ events: enrichedEvents });
+    return res.json({ journey, events: enrichedEvents });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Resolve the active care journey (or specific journey)
+router.post('/journey/resolve', async (req: Request, res: Response) => {
+  try {
+    await getDb();
+    const patientId = getPatientId(req);
+    if (!patientId) return res.status(404).json({ error: 'Patient not found' });
+
+    const { journey_id, end_date } = req.body;
+    const resolvedDate = end_date || new Date().toISOString().split('T')[0];
+
+    let targetJourney: any = null;
+    if (journey_id) {
+      targetJourney = queryOne(`SELECT * FROM journeys WHERE id = ? AND patient_id = ?`, [journey_id, patientId]);
+    } else {
+      targetJourney = queryOne(`SELECT * FROM journeys WHERE patient_id = ? AND status = 'active' LIMIT 1`, [patientId]);
+    }
+
+    if (!targetJourney) {
+      return res.status(404).json({ error: 'No active care journey found to resolve' });
+    }
+
+    execute(`
+      UPDATE journeys
+      SET status = 'resolved', end_date = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [resolvedDate, targetJourney.id]);
+
+    // Mark any remaining events as completed if desired, and update patient stage
+    execute(`
+      UPDATE journey_events
+      SET status = 'completed'
+      WHERE journey_id = ? AND status = 'current'
+    `, [targetJourney.id]);
+
+    execute(`UPDATE patients SET current_stage = 'Resolved' WHERE id = ?`, [patientId]);
+
+    // Add confirmation notification
+    execute(`
+      INSERT INTO notifications (id, patient_id, title, message, type, is_read, action_tab, created_at)
+      VALUES (?, ?, ?, ?, 'journey', 0, 'journey', CURRENT_TIMESTAMP)
+    `, [
+      uuidv4(),
+      patientId,
+      'Care Journey Resolved',
+      `Your care journey "${targetJourney.title}" has been successfully resolved and archived into My Care History.`
+    ]);
+
+    return res.json({ success: true, message: `Care journey "${targetJourney.title}" marked as resolved.`, journeyId: targetJourney.id });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Start a new care journey (strictly enforces only ONE active journey at a time)
+router.post('/journeys', async (req: Request, res: Response) => {
+  try {
+    await getDb();
+    const patientId = getPatientId(req);
+    if (!patientId) return res.status(404).json({ error: 'Patient not found' });
+
+    const { title, category, start_date, initial_stage, initial_description, doctor_id, hospital_id } = req.body;
+    if (!title) {
+      return res.status(400).json({ error: 'Journey title is required' });
+    }
+
+    const startDate = start_date || new Date().toISOString().split('T')[0];
+    const stage = initial_stage || 'Symptoms';
+
+    // Enforce ONE active journey constraint: archive any current active journey
+    const currentActive = queryOne(`SELECT * FROM journeys WHERE patient_id = ? AND status = 'active' LIMIT 1`, [patientId]);
+    if (currentActive) {
+      execute(`
+        UPDATE journeys
+        SET status = 'resolved', end_date = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `, [startDate, currentActive.id]);
+    }
+
+    const newJourneyId = `journey-${uuidv4().substring(0, 8)}`;
+    execute(`
+      INSERT INTO journeys (id, patient_id, title, status, start_date, end_date, category)
+      VALUES (?, ?, ?, 'active', ?, NULL, ?)
+    `, [
+      newJourneyId,
+      patientId,
+      title,
+      startDate,
+      category || 'General Care'
+    ]);
+
+    // Create initial milestone event for this new journey
+    const initialEventId = uuidv4();
+    execute(`
+      INSERT INTO journey_events (id, patient_id, journey_id, stage, title, description, date, status, doctor_id, hospital_id, next_step)
+      VALUES (?, ?, ?, ?, ?, ?, 'current', ?, ?, ?)
+    `, [
+      initialEventId,
+      patientId,
+      newJourneyId,
+      stage,
+      `Initial Clinical Evaluation: ${title}`,
+      initial_description || `Beginning of new care journey for ${title}.`,
+      startDate,
+      doctor_id || null,
+      hospital_id || null,
+      'Schedule physician consultation'
+    ]);
+
+    execute(`UPDATE patients SET current_stage = ? WHERE id = ?`, [stage, patientId]);
+
+    // Create notification
+    execute(`
+      INSERT INTO notifications (id, patient_id, title, message, type, is_read, action_tab, created_at)
+      VALUES (?, ?, ?, ?, 'journey', 0, 'journey', CURRENT_TIMESTAMP)
+    `, [
+      uuidv4(),
+      patientId,
+      'New Care Journey Started',
+      `New care journey "${title}" has been created with active stage "${stage}".`
+    ]);
+
+    return res.status(201).json({
+      success: true,
+      journeyId: newJourneyId,
+      eventId: initialEventId,
+      message: `New care journey "${title}" started successfully.`
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -233,18 +514,46 @@ router.post('/journey', async (req: Request, res: Response) => {
     const patientId = getPatientId(req);
     if (!patientId) return res.status(404).json({ error: 'Patient not found' });
 
-    const { stage, title, description, date, status, next_step, doctor_id, hospital_id } = req.body;
+    const { stage, title, description, date, status, next_step, doctor_id, hospital_id, journey_id, start_new_journey, new_journey_title } = req.body;
     if (!stage || !title || !date) {
       return res.status(400).json({ error: 'Stage, title and date are required' });
     }
 
+    let targetJourneyId = journey_id;
+
+    if (start_new_journey) {
+      // Resolve existing active journey if any
+      const cur = queryOne(`SELECT * FROM journeys WHERE patient_id = ? AND status = 'active' LIMIT 1`, [patientId]);
+      if (cur) {
+        execute(`UPDATE journeys SET status = 'resolved', end_date = ? WHERE id = ?`, [date, cur.id]);
+      }
+      targetJourneyId = `journey-${uuidv4().substring(0, 8)}`;
+      execute(`
+        INSERT INTO journeys (id, patient_id, title, status, start_date)
+        VALUES (?, ?, ?, 'active', ?)
+      `, [targetJourneyId, patientId, new_journey_title || title, date]);
+    } else if (!targetJourneyId) {
+      // Find active journey or auto-create one
+      const cur = queryOne(`SELECT * FROM journeys WHERE patient_id = ? AND status = 'active' LIMIT 1`, [patientId]);
+      if (cur) {
+        targetJourneyId = cur.id;
+      } else {
+        targetJourneyId = `journey-${uuidv4().substring(0, 8)}`;
+        execute(`
+          INSERT INTO journeys (id, patient_id, title, status, start_date)
+          VALUES (?, ?, ?, 'active', ?)
+        `, [targetJourneyId, patientId, title, date]);
+      }
+    }
+
     const eventId = uuidv4();
     execute(`
-      INSERT INTO journey_events (id, patient_id, stage, title, description, date, status, doctor_id, hospital_id, next_step)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO journey_events (id, patient_id, journey_id, stage, title, description, date, status, doctor_id, hospital_id, next_step)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       eventId,
       patientId,
+      targetJourneyId,
       stage,
       title,
       description || '',
@@ -259,7 +568,7 @@ router.post('/journey', async (req: Request, res: Response) => {
       execute(`UPDATE patients SET current_stage = ? WHERE id = ?`, [stage, patientId]);
     }
 
-    return res.status(201).json({ success: true, id: eventId, message: 'Journey event recorded' });
+    return res.status(201).json({ success: true, id: eventId, journeyId: targetJourneyId, message: 'Journey event recorded' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -567,7 +876,100 @@ router.post('/reports', async (req: Request, res: Response) => {
   }
 });
 
-// 6. Appointments
+// 6. Appointments & Doctor Selection
+router.get('/doctors', async (req: Request, res: Response) => {
+  try {
+    await getDb();
+    const patientId = getPatientId(req);
+    if (!patientId) return res.status(404).json({ error: 'Patient not found' });
+
+    const patient = queryOne(`SELECT doctor_id, hospital_id FROM patients WHERE id = ?`, [patientId]);
+    if (!patient) return res.status(404).json({ error: 'Patient profile not found' });
+
+    const patientHospitalId = patient.hospital_id;
+    const assignedDoctorId = patient.doctor_id;
+
+    // Return ALL active doctors across ALL hospitals in the system.
+    // Patients can see any doctor at any hospital (e.g. for second opinions, cross-hospital specialists).
+    // Order: patient's assigned doctor first, other doctors at patient's primary hospital, then other hospitals and doctors.
+    const doctors = queryAll(`
+      SELECT 
+        d.id,
+        d.user_id,
+        d.hospital_id,
+        d.specialization,
+        d.is_active,
+        u.name,
+        u.email,
+        h.name as hospital_name,
+        h.address as hospital_address,
+        CASE WHEN d.id = ? THEN 1 ELSE 0 END as is_primary
+      FROM doctors d
+      JOIN users u ON d.user_id = u.id
+      LEFT JOIN hospitals h ON d.hospital_id = h.id
+      WHERE d.is_active = 1
+      ORDER BY 
+        CASE WHEN d.id = ? THEN 0 ELSE 1 END,
+        CASE WHEN d.hospital_id = ? THEN 0 ELSE 1 END,
+        h.name ASC,
+        u.name ASC
+    `, [assignedDoctorId, assignedDoctorId, patientHospitalId]);
+
+    return res.json({ 
+      doctors, 
+      assigned_doctor_id: assignedDoctorId,
+      hospital_id: patientHospitalId 
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/available-doctors', async (req: Request, res: Response) => {
+  try {
+    await getDb();
+    const patientId = getPatientId(req);
+    if (!patientId) return res.status(404).json({ error: 'Patient not found' });
+
+    const patient = queryOne(`SELECT doctor_id, hospital_id FROM patients WHERE id = ?`, [patientId]);
+    if (!patient) return res.status(404).json({ error: 'Patient profile not found' });
+
+    const patientHospitalId = patient.hospital_id;
+    const assignedDoctorId = patient.doctor_id;
+
+    const doctors = queryAll(`
+      SELECT 
+        d.id,
+        d.user_id,
+        d.hospital_id,
+        d.specialization,
+        d.is_active,
+        u.name,
+        u.email,
+        h.name as hospital_name,
+        h.address as hospital_address,
+        CASE WHEN d.id = ? THEN 1 ELSE 0 END as is_primary
+      FROM doctors d
+      JOIN users u ON d.user_id = u.id
+      LEFT JOIN hospitals h ON d.hospital_id = h.id
+      WHERE d.is_active = 1
+      ORDER BY 
+        CASE WHEN d.id = ? THEN 0 ELSE 1 END,
+        CASE WHEN d.hospital_id = ? THEN 0 ELSE 1 END,
+        h.name ASC,
+        u.name ASC
+    `, [assignedDoctorId, assignedDoctorId, patientHospitalId]);
+
+    return res.json({ 
+      doctors, 
+      assigned_doctor_id: assignedDoctorId,
+      hospital_id: patientHospitalId 
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/appointments', async (req: Request, res: Response) => {
   try {
     await getDb();
@@ -607,6 +1009,30 @@ router.post('/appointments', async (req: Request, res: Response) => {
     }
 
     const patient = queryOne(`SELECT doctor_id, hospital_id FROM patients WHERE id = ?`, [patientId]);
+    if (!patient) return res.status(404).json({ error: 'Patient profile not found' });
+
+    const targetDoctorId = doctor_id || patient.doctor_id;
+    if (!targetDoctorId) {
+      return res.status(400).json({ error: 'Please select a consulting doctor' });
+    }
+
+    // Verify doctor: target doctor can be any active doctor across all hospitals in the system
+    const validDoctor = queryOne(`
+      SELECT d.id, d.hospital_id, u.name as doctor_name, d.specialization
+      FROM doctors d
+      JOIN users u ON d.user_id = u.id
+      WHERE d.id = ? AND (d.is_active = 1 OR d.id = ?)
+    `, [targetDoctorId, patient.doctor_id]);
+
+    if (!validDoctor) {
+      return res.status(400).json({ 
+        error: 'The selected doctor is not active or available for appointments.' 
+      });
+    }
+
+    // Save appointment with the target doctor's specific hospital affiliation
+    // (e.g. City General for Dr. Marcus Vance or Dr. Priya Patel)
+    const targetHospitalId = validDoctor.hospital_id || hospital_id || patient.hospital_id;
     const apptId = uuidv4();
 
     execute(`
@@ -615,15 +1041,53 @@ router.post('/appointments', async (req: Request, res: Response) => {
     `, [
       apptId,
       patientId,
-      doctor_id || patient?.doctor_id,
-      hospital_id || patient?.hospital_id,
+      targetDoctorId,
+      targetHospitalId,
       date,
       time,
       purpose,
       notes || ''
     ]);
 
-    return res.status(201).json({ success: true, id: apptId, message: 'Appointment booked successfully' });
+    // Send notifications
+    try {
+      execute(`
+        INSERT INTO notifications (id, patient_id, title, message, type, is_read, action_tab, created_at)
+        VALUES (?, ?, ?, ?, 'appointment', 0, 'appointments', CURRENT_TIMESTAMP)
+      `, [
+        uuidv4(),
+        patientId,
+        'Consultation Scheduled',
+        `Your consultation with ${validDoctor.doctor_name} (${validDoctor.specialization}) is confirmed for ${date} at ${time}.`
+      ]);
+
+      const patientUser = queryOne(`
+        SELECT u.name FROM patients p JOIN users u ON p.user_id = u.id WHERE p.id = ?
+      `, [patientId]);
+      const patientName = patientUser?.name || 'Patient';
+
+      execute(`
+        INSERT INTO doctor_notifications (id, doctor_id, patient_id, patient_name, title, message, type, severity, is_read, action_tab, action_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'appointment', 'normal', 0, 'appointments', ?, CURRENT_TIMESTAMP)
+      `, [
+        uuidv4(),
+        targetDoctorId,
+        patientId,
+        patientName,
+        'New Patient Consultation Booked',
+        `${patientName} booked an appointment for ${date} at ${time} (${purpose}).`,
+        apptId
+      ]);
+    } catch (notifErr) {
+      console.warn('Failed to insert appointment notification:', notifErr);
+    }
+
+    return res.status(201).json({ 
+      success: true, 
+      id: apptId, 
+      doctor_id: targetDoctorId,
+      message: 'Appointment booked successfully' 
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -928,10 +1392,11 @@ router.get('/timeline', async (req: Request, res: Response) => {
     // Aggregate all granular records from DB into a unified flat reverse-chronological activity log
     const timeline: any[] = [];
 
-    // 1. Journey Stage Events
+    // 1. Journey Stage Events (Across all historical and active journeys)
     const journeyEvents = queryAll(`
-      SELECT j.*, u_doc.name as doctor_name, h.name as hospital_name
+      SELECT j.*, u_doc.name as doctor_name, h.name as hospital_name, jn.title as journey_title
       FROM journey_events j
+      LEFT JOIN journeys jn ON j.journey_id = jn.id
       LEFT JOIN doctors d ON j.doctor_id = d.id
       LEFT JOIN users u_doc ON d.user_id = u_doc.id
       LEFT JOIN hospitals h ON j.hospital_id = h.id
@@ -939,10 +1404,11 @@ router.get('/timeline', async (req: Request, res: Response) => {
     `, [patientId]);
 
     journeyEvents.forEach((ev: any) => {
+      const journeyPrefix = ev.journey_title ? `[${ev.journey_title}] ` : '';
       timeline.push({
         id: `timeline-j-${ev.id}`,
         category: 'journey',
-        title: `Journey Milestone: ${ev.stage} — ${ev.title}`,
+        title: `${journeyPrefix}Milestone: ${ev.stage} — ${ev.title}`,
         description: ev.description || `Milestone status: ${ev.status}`,
         date: ev.date,
         timestamp: `${ev.date} • ${ev.doctor_name || 'Clinical Team'}`,
@@ -951,6 +1417,7 @@ router.get('/timeline', async (req: Request, res: Response) => {
         iconName: 'Layers',
         relatedStage: ev.stage,
         metadata: {
+          journeyTitle: ev.journey_title,
           doctor: ev.doctor_name,
           hospital: ev.hospital_name,
           nextStep: ev.next_step,
@@ -1046,6 +1513,7 @@ router.get('/timeline', async (req: Request, res: Response) => {
         metadata: {
           status: app.status,
           doctor: app.doctor_name,
+          hospital: app.hospital_name,
           notes: app.notes,
         }
       });

@@ -46,10 +46,12 @@ import { NotificationsInbox } from './NotificationsInbox';
 import { AiHealthSummary } from './AiHealthSummary';
 import { CaregiverManager } from './CaregiverManager';
 import { PatientSettings } from './PatientSettings';
+import { CareHistory } from './CareHistory';
 
 export type PatientTabType =
   | 'dashboard'
   | 'journey'
+  | 'care_history'
   | 'health_recorder'
   | 'analytics'
   | 'history'
@@ -114,6 +116,7 @@ export const PatientPortal: React.FC = () => {
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
         { id: 'journey', label: 'Care Journey', icon: Layers, badge: 'Stage 6' },
+        { id: 'care_history', label: 'My Care History', icon: History, badge: 'Episodes' },
         { id: 'health_recorder', label: 'Daily Vitals Log', icon: Heart, badge: 'Daily' },
         { id: 'analytics', label: 'Health Analytics', icon: TrendingUp, badge: '7 Trends' },
         { id: 'history', label: 'Daily History', icon: History, badge: '14 Days' },
@@ -374,7 +377,14 @@ export const PatientPortal: React.FC = () => {
           )}
 
           {activeTab === 'journey' && (
-            <JourneyTimeline onStageSelect={(stage) => console.log('Selected stage:', stage)} />
+            <JourneyTimeline 
+              onStageSelect={(stage) => console.log('Selected stage:', stage)}
+              onNavigateTab={(tab) => handleSelectTab(tab)}
+            />
+          )}
+
+          {activeTab === 'care_history' && (
+            <CareHistory onNavigateTab={(tab) => handleSelectTab(tab)} />
           )}
 
           {activeTab === 'health_recorder' && (
