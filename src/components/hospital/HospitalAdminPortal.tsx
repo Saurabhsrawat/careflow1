@@ -6,6 +6,7 @@ import {
   HospitalAppointmentItem, 
   User 
 } from '../../types';
+import { authFetch } from '../../utils/api';
 import { HospitalDashboard } from './HospitalDashboard';
 import { HospitalDoctorsList } from './HospitalDoctorsList';
 import { HospitalPatientsList } from './HospitalPatientsList';
@@ -74,6 +75,7 @@ export const HospitalAdminPortal: React.FC<HospitalAdminPortalProps> = ({
   // Database Reset State
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // Load all admin data
   const fetchAllData = async () => {
@@ -83,9 +85,7 @@ export const HospitalAdminPortal: React.FC<HospitalAdminPortalProps> = ({
 
     try {
       // 1. Fetch Dashboard Stats
-      const dashRes = await fetch('/api/hospitals/admin/dashboard', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const dashRes = await authFetch('/api/hospitals/admin/dashboard');
       if (!dashRes.ok) {
         const dErr = await dashRes.json();
         throw new Error(dErr.error || 'Failed to fetch dashboard data');
@@ -94,27 +94,21 @@ export const HospitalAdminPortal: React.FC<HospitalAdminPortalProps> = ({
       setDashboardData(dashJson);
 
       // 2. Fetch Doctors
-      const docRes = await fetch('/api/hospitals/admin/doctors', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const docRes = await authFetch('/api/hospitals/admin/doctors');
       if (docRes.ok) {
         const docJson = await docRes.json();
         setDoctors(docJson.doctors || []);
       }
 
       // 3. Fetch Patients
-      const patRes = await fetch('/api/hospitals/admin/patients', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const patRes = await authFetch('/api/hospitals/admin/patients');
       if (patRes.ok) {
         const patJson = await patRes.json();
         setPatients(patJson.patients || []);
       }
 
       // 4. Fetch Appointments
-      const apptRes = await fetch('/api/hospitals/admin/appointments', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const apptRes = await authFetch('/api/hospitals/admin/appointments');
       if (apptRes.ok) {
         const apptJson = await apptRes.json();
         setAppointments(apptJson.appointments || []);
@@ -133,10 +127,9 @@ export const HospitalAdminPortal: React.FC<HospitalAdminPortalProps> = ({
 
   // Handle Database Re-seed
   const handleResetDatabase = async () => {
-    if (!window.confirm('Reset database to clean initial seeded records?')) return;
     setIsResetting(true);
     try {
-      const res = await fetch('/api/hospitals/reset', { method: 'POST' });
+      const res = await authFetch('/api/hospitals/reset', { method: 'POST' });
       if (res.ok) {
         setResetSuccess(true);
         await fetchAllData();
@@ -262,23 +255,56 @@ export const HospitalAdminPortal: React.FC<HospitalAdminPortalProps> = ({
             {/* Quick Reset & Audit Buttons */}
             {!collapsed ? (
               <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
-                <button
-                  onClick={handleResetDatabase}
-                  disabled={isResetting}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer disabled:opacity-50"
-                  title="Reset database to clean initial seed data"
-                >
-                  <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-                  <span>{resetSuccess ? 'Reset Done!' : 'Reset Demo Database'}</span>
-                </button>
+                {confirmReset ? (
+                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-xl text-center space-y-1.5 animate-fadeIn">
+                    <p className="text-[11px] font-semibold text-rose-800">Reset Demo Database?</p>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          setConfirmReset(false);
+                          handleResetDatabase();
+                        }}
+                        disabled={isResetting}
+                        className="px-2.5 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition cursor-pointer disabled:opacity-50"
+                      >
+                        Yes, Reset
+                      </button>
+                      <button
+                        onClick={() => setConfirmReset(false)}
+                        className="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmReset(true)}
+                    disabled={isResetting}
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer disabled:opacity-50"
+                    title="Reset database to clean initial seed data"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+                    <span>{resetSuccess ? 'Reset Done!' : 'Reset Demo Database'}</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="pt-1 border-t border-slate-100 flex flex-col items-center">
                 <button
-                  onClick={handleResetDatabase}
+                  onClick={() => {
+                    if (confirmReset) {
+                      setConfirmReset(false);
+                      handleResetDatabase();
+                    } else {
+                      setConfirmReset(true);
+                    }
+                  }}
                   disabled={isResetting}
-                  title="Reset Demo DB"
-                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition cursor-pointer"
+                  title={confirmReset ? "Click again to confirm reset" : "Reset Demo DB"}
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer ${
+                    confirmReset ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-500' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
                 >
                   <RotateCcw className={`w-4 h-4 ${isResetting ? 'animate-spin' : ''}`} />
                 </button>

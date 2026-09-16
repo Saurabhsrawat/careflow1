@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   ShieldCheck, 
   ShieldAlert, 
@@ -93,37 +94,30 @@ export const HospitalIsolationTester: React.FC<HospitalIsolationTesterProps> = (
     try {
       let res: Response;
       if (test.id === 'test-1') {
-        res = await fetch('/api/hospitals/admin/dashboard', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        res = await authFetch('/api/hospitals/admin/dashboard');
       } else if (test.id === 'test-2') {
-        res = await fetch('/api/hospitals/admin/test-isolation', {
+        res = await authFetch('/api/hospitals/admin/test-isolation', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({ target_hospital_id: 'hosp-citygen' })
         });
       } else if (test.id === 'test-3') {
-        res = await fetch('/api/hospitals/admin/doctors/doc-marcus-citygen/status', {
+        res = await authFetch('/api/hospitals/admin/doctors/doc-marcus-citygen/status', {
           method: 'PATCH',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({ is_active: 0 })
         });
       } else if (test.id === 'test-4') {
-        res = await fetch('/api/hospitals/admin/patients/pat-david-kim', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        res = await authFetch('/api/hospitals/admin/patients/pat-david-kim');
       } else if (test.id === 'test-5') {
-        res = await fetch('/api/hospitals/admin/appointments/app-citygen-001/reassign', {
+        res = await authFetch('/api/hospitals/admin/appointments/app-citygen-001/reassign', {
           method: 'PATCH',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({ new_doctor_id: 'doc-chen-stjude' })
         });

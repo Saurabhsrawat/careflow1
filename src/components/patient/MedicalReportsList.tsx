@@ -16,6 +16,7 @@ import {
   Heart
 } from 'lucide-react';
 import { MedicalReport, JourneyStage } from '../../types';
+import { authFetch } from '../../utils/api';
 
 export const MedicalReportsList: React.FC = () => {
   const [reports, setReports] = useState<MedicalReport[]>([]);
@@ -34,22 +35,10 @@ export const MedicalReportsList: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/reports', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/reports');
       if (res.ok) {
         const data = await res.json();
         setReports(data.reports || []);
@@ -87,10 +76,9 @@ export const MedicalReportsList: React.FC = () => {
 
       const fileNameToUse = selectedFileName || `${reportName.toLowerCase().replace(/[^a-z0-9]/g, '_')}.pdf`;
 
-      const res = await fetch('/api/patient/reports', {
+      const res = await authFetch('/api/patient/reports', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: reportName.trim(),
           type: reportType,

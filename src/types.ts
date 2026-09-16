@@ -12,7 +12,7 @@ export type JourneyStage =
 
 export type JourneyStatus = 'completed' | 'current' | 'upcoming' | 'delayed';
 
-export type AppointmentStatus = 'upcoming' | 'completed' | 'cancelled' | 'past';
+export type AppointmentStatus = 'pending' | 'confirmed' | 'upcoming' | 'completed' | 'cancelled' | 'declined' | 'past';
 
 export type TaskStatus = 'pending' | 'completed' | 'overdue';
 

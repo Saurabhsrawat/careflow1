@@ -22,6 +22,7 @@ import {
   Activity
 } from 'lucide-react';
 import { HealthcareJourney, JourneyEvent } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface CareHistoryProps {
   onNavigateTab: (tab: any) => void;
@@ -56,20 +57,10 @@ export const CareHistory: React.FC<CareHistoryProps> = ({ onNavigateTab, onSelec
   const [resolveEndDate, setResolveEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [submittingResolve, setSubmittingResolve] = useState<boolean>(false);
 
-  const getAuthHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    return headers;
-  };
-
   const fetchJourneys = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/journeys', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/journeys');
       if (res.ok) {
         const data = await res.json();
         setJourneys(data.journeys || []);
@@ -90,10 +81,7 @@ export const CareHistory: React.FC<CareHistoryProps> = ({ onNavigateTab, onSelec
   const handleOpenJourneyDetails = async (journey: HealthcareJourney) => {
     try {
       setLoadingDetail(true);
-      const res = await fetch(`/api/patient/journeys/${journey.id}`, {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch(`/api/patient/journeys/${journey.id}`);
       if (res.ok) {
         const data = await res.json();
         setSelectedJourneyDetail(data);
@@ -111,13 +99,11 @@ export const CareHistory: React.FC<CareHistoryProps> = ({ onNavigateTab, onSelec
 
     try {
       setSubmittingNew(true);
-      const res = await fetch('/api/patient/journeys', {
+      const res = await authFetch('/api/patient/journeys', {
         method: 'POST',
         headers: {
-          ...getAuthHeaders(),
           'Content-Type': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({
           title: newTitle.trim(),
           category: newCategory,
@@ -144,13 +130,11 @@ export const CareHistory: React.FC<CareHistoryProps> = ({ onNavigateTab, onSelec
     if (!journeyToResolve) return;
     try {
       setSubmittingResolve(true);
-      const res = await fetch('/api/patient/journey/resolve', {
+      const res = await authFetch('/api/patient/journey/resolve', {
         method: 'POST',
         headers: {
-          ...getAuthHeaders(),
           'Content-Type': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({
           journey_id: journeyToResolve.id,
           end_date: resolveEndDate

@@ -1228,17 +1228,70 @@ router.post('/appointments', async (req: Request, res: Response) => {
 router.patch('/appointments/:id', async (req: Request, res: Response) => {
   try {
     await getDb();
+    const doc = getDoctorInfo(req);
     const { id } = req.params;
     const { status, notes } = req.body;
+
+    const existingAppt = queryOne(`
+      SELECT a.*, u_doc.name as doctor_name, u_pat.name as patient_name
+      FROM appointments a
+      LEFT JOIN doctors d ON a.doctor_id = d.id
+      LEFT JOIN users u_doc ON d.user_id = u_doc.id
+      LEFT JOIN patients p ON a.patient_id = p.id
+      LEFT JOIN users u_pat ON p.user_id = u_pat.id
+      WHERE a.id = ?
+    `, [id]);
+
+    if (!existingAppt) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
 
     if (status) {
       execute(`UPDATE appointments SET status = ? WHERE id = ?`, [status, id]);
     }
-    if (notes) {
+    if (notes !== undefined) {
       execute(`UPDATE appointments SET notes = ? WHERE id = ?`, [notes, id]);
     }
 
-    return res.json({ success: true });
+    // Send notifications to the patient regarding their consultation status update
+    try {
+      const doctorDisplayName = existingAppt.doctor_name || doc?.doctor_name || 'Your Doctor';
+      if (status === 'confirmed' || status === 'upcoming') {
+        execute(`
+          INSERT INTO notifications (id, patient_id, title, message, type, is_read, action_tab, created_at)
+          VALUES (?, ?, ?, ?, 'appointment', 0, 'appointments', CURRENT_TIMESTAMP)
+        `, [
+          uuidv4(),
+          existingAppt.patient_id,
+          'Consultation Confirmed',
+          `${doctorDisplayName} has accepted and confirmed your consultation for ${existingAppt.date} at ${existingAppt.time}.`
+        ]);
+      } else if (status === 'cancelled') {
+        execute(`
+          INSERT INTO notifications (id, patient_id, title, message, type, is_read, action_tab, created_at)
+          VALUES (?, ?, ?, ?, 'appointment', 0, 'appointments', CURRENT_TIMESTAMP)
+        `, [
+          uuidv4(),
+          existingAppt.patient_id,
+          'Consultation Request Declined',
+          `Your appointment request for ${existingAppt.date} at ${existingAppt.time} was cancelled or declined by ${doctorDisplayName}.`
+        ]);
+      } else if (status === 'completed') {
+        execute(`
+          INSERT INTO notifications (id, patient_id, title, message, type, is_read, action_tab, created_at)
+          VALUES (?, ?, ?, ?, 'appointment', 0, 'appointments', CURRENT_TIMESTAMP)
+        `, [
+          uuidv4(),
+          existingAppt.patient_id,
+          'Consultation Completed',
+          `Your consultation on ${existingAppt.date} with ${doctorDisplayName} has been marked as completed.`
+        ]);
+      }
+    } catch (notifErr) {
+      console.warn('Failed to insert patient status notification:', notifErr);
+    }
+
+    return res.json({ success: true, id, status });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

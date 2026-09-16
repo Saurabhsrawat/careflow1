@@ -12,6 +12,7 @@ import {
   Filter
 } from 'lucide-react';
 import { Task } from '../../types';
+import { authFetch } from '../../utils/api';
 
 export const TasksChecklist: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -24,22 +25,10 @@ export const TasksChecklist: React.FC = () => {
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/tasks', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/tasks');
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
@@ -61,10 +50,9 @@ export const TasksChecklist: React.FC = () => {
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
 
     try {
-      const res = await fetch(`/api/patient/tasks/${task.id}`, {
+      const res = await authFetch(`/api/patient/tasks/${task.id}`, {
         method: 'PATCH',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
       if (!res.ok) {
@@ -81,10 +69,9 @@ export const TasksChecklist: React.FC = () => {
     if (!newTaskTitle) return;
     try {
       setSubmitting(true);
-      const res = await fetch('/api/patient/tasks', {
+      const res = await authFetch('/api/patient/tasks', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: newTaskTitle,
           due_date: newTaskDueDate || null

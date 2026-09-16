@@ -24,6 +24,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { DailyHealthRecord, Symptom } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface HealthHistoryProps {
   onNavigateTab?: (tab: 'dashboard' | 'journey' | 'health_recorder' | 'analytics' | 'history' | 'reports' | 'appointments' | 'tasks') => void;
@@ -39,11 +40,7 @@ export const HealthHistory: React.FC<HealthHistoryProps> = ({ onNavigateTab }) =
   const fetchRecords = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('careflow_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('/api/patient/daily-health?limit=60', { headers, credentials: 'include' });
+      const res = await authFetch('/api/patient/daily-health?limit=60');
       if (res.ok) {
         const ct = res.headers.get('content-type');
         if (ct && ct.includes('application/json')) {

@@ -47,6 +47,7 @@ import { AiHealthSummary } from './AiHealthSummary';
 import { CaregiverManager } from './CaregiverManager';
 import { PatientSettings } from './PatientSettings';
 import { CareHistory } from './CareHistory';
+import { authFetch } from '../../utils/api';
 
 export type PatientTabType =
   | 'dashboard'
@@ -89,14 +90,7 @@ export const PatientPortal: React.FC = () => {
 
   const fetchUnreadCount = async () => {
     try {
-      const token = localStorage.getItem('careflow_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('/api/patient/notifications', {
-        headers,
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/notifications');
       if (res.ok) {
         const data = await res.json();
         setUnreadCount(data.unreadCount ?? 0);

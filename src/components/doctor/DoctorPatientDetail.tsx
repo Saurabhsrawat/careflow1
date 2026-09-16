@@ -277,6 +277,21 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
     }
   };
 
+  const handleUpdateApptStatus = async (apptId: string, status: string) => {
+    try {
+      const res = await authFetch(`/api/doctor/appointments/${apptId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) {
+        await fetchPatientDetails();
+      }
+    } catch (err) {
+      console.error('Failed to update appointment status:', err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
@@ -1223,26 +1238,70 @@ export const DoctorPatientDetail: React.FC<PatientDetailProps> = ({ patientId, o
           </div>
 
           <div className="space-y-3">
-            {appointments.map((appt: any) => (
-              <div key={appt.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900">{appt.purpose}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                      appt.status === 'upcoming' ? 'bg-blue-100 text-blue-800' : appt.status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                    }`}>
-                      {appt.status}
-                    </span>
+            {appointments.map((appt: any) => {
+              const isPending = appt.status === 'pending';
+              const isConfirmed = appt.status === 'confirmed';
+              const isUpcoming = appt.status === 'upcoming';
+              const isCompleted = appt.status === 'completed';
+
+              return (
+                <div key={appt.id} className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                  isPending ? 'bg-amber-50/40 border-amber-200' : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-900">{appt.purpose}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        isPending 
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                          : isConfirmed 
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                          : isUpcoming 
+                          ? 'bg-indigo-100 text-indigo-800' 
+                          : isCompleted 
+                          ? 'bg-emerald-100 text-emerald-800' 
+                          : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {isPending ? 'Pending Confirmation' : isConfirmed ? 'Confirmed' : appt.status}
+                      </span>
+                    </div>
+                    <div className="text-slate-500">
+                      Date: <strong className="text-slate-700">{appt.date}</strong> at <strong className="text-slate-700">{appt.time}</strong> &bull; {appt.hospital_name || 'St. Jude Cardiology'}
+                    </div>
+                    {appt.notes && (
+                      <div className="text-slate-600 italic">Notes: {appt.notes}</div>
+                    )}
                   </div>
-                  <div className="text-slate-500">
-                    Date: <strong className="text-slate-700">{appt.date}</strong> at <strong className="text-slate-700">{appt.time}</strong> &bull; St. Jude Cardiology
+
+                  <div className="flex items-center gap-2 self-end sm:self-center">
+                    {isPending && (
+                      <>
+                        <button
+                          onClick={() => handleUpdateApptStatus(appt.id, 'confirmed')}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors"
+                        >
+                          Accept & Confirm
+                        </button>
+                        <button
+                          onClick={() => handleUpdateApptStatus(appt.id, 'cancelled')}
+                          className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-medium text-xs transition-colors"
+                        >
+                          Decline
+                        </button>
+                      </>
+                    )}
+                    {(isConfirmed || isUpcoming) && (
+                      <button
+                        onClick={() => handleUpdateApptStatus(appt.id, 'completed')}
+                        className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-semibold text-xs transition-colors"
+                      >
+                        Mark Completed
+                      </button>
+                    )}
                   </div>
-                  {appt.notes && (
-                    <div className="text-slate-600 italic">Notes: {appt.notes}</div>
-                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

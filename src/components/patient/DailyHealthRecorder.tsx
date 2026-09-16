@@ -19,6 +19,7 @@ import {
   Clock
 } from 'lucide-react';
 import { DailyHealthRecord, Symptom } from '../../types';
+import { authFetch } from '../../utils/api';
 import { 
   ResponsiveContainer, 
   ComposedChart, 
@@ -72,13 +73,9 @@ export const DailyHealthRecorder: React.FC<DailyHealthRecorderProps> = ({ onReco
   const fetchRecords = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('careflow_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
       const [recRes, corrRes] = await Promise.all([
-        fetch('/api/patient/daily-health?limit=30', { headers, credentials: 'include' }),
-        fetch('/api/patient/correlation-insights', { headers, credentials: 'include' })
+        authFetch('/api/patient/daily-health?limit=30'),
+        authFetch('/api/patient/correlation-insights')
       ]);
 
       if (recRes.ok) {
@@ -179,16 +176,11 @@ export const DailyHealthRecorder: React.FC<DailyHealthRecorderProps> = ({ onReco
         symptoms: symptoms.filter(s => s.name && s.name.trim().length > 0)
       };
 
-      const token = localStorage.getItem('careflow_token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      };
-
-      const res = await fetch('/api/patient/daily-health', {
+      const res = await authFetch('/api/patient/daily-health', {
         method: 'POST',
-        headers,
-        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(payload)
       });
 

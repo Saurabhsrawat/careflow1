@@ -70,8 +70,8 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       LEFT JOIN doctors d ON a.doctor_id = d.id
       LEFT JOIN users u_doc ON d.user_id = u_doc.id
       LEFT JOIN hospitals h ON a.hospital_id = h.id
-      WHERE a.patient_id = ? AND a.status = 'upcoming'
-      ORDER BY a.date ASC, a.time ASC
+      WHERE a.patient_id = ? AND (a.status = 'upcoming' OR a.status = 'confirmed' OR a.status = 'pending')
+      ORDER BY CASE WHEN a.status = 'confirmed' THEN 0 WHEN a.status = 'upcoming' THEN 1 ELSE 2 END, a.date ASC, a.time ASC
       LIMIT 1
     `, [patientId]);
 
@@ -1034,10 +1034,11 @@ router.post('/appointments', async (req: Request, res: Response) => {
     // (e.g. City General for Dr. Marcus Vance or Dr. Priya Patel)
     const targetHospitalId = validDoctor.hospital_id || hospital_id || patient.hospital_id;
     const apptId = uuidv4();
+    const apptStatus = req.body.status || 'pending';
 
     execute(`
       INSERT INTO appointments (id, patient_id, doctor_id, hospital_id, date, time, purpose, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'upcoming', ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       apptId,
       patientId,
@@ -1046,6 +1047,7 @@ router.post('/appointments', async (req: Request, res: Response) => {
       date,
       time,
       purpose,
+      apptStatus,
       notes || ''
     ]);
 
@@ -1057,8 +1059,10 @@ router.post('/appointments', async (req: Request, res: Response) => {
       `, [
         uuidv4(),
         patientId,
-        'Consultation Scheduled',
-        `Your consultation with ${validDoctor.doctor_name} (${validDoctor.specialization}) is confirmed for ${date} at ${time}.`
+        apptStatus === 'confirmed' ? 'Consultation Scheduled' : 'Consultation Request Submitted',
+        apptStatus === 'confirmed'
+          ? `Your consultation with ${validDoctor.doctor_name} (${validDoctor.specialization}) is confirmed for ${date} at ${time}.`
+          : `Your consultation request with ${validDoctor.doctor_name} (${validDoctor.specialization}) for ${date} at ${time} has been submitted and is awaiting doctor confirmation.`
       ]);
 
       const patientUser = queryOne(`
@@ -1074,8 +1078,8 @@ router.post('/appointments', async (req: Request, res: Response) => {
         targetDoctorId,
         patientId,
         patientName,
-        'New Patient Consultation Booked',
-        `${patientName} booked an appointment for ${date} at ${time} (${purpose}).`,
+        'New Consultation Request (Pending Confirmation)',
+        `${patientName} requested an appointment for ${date} at ${time} (${purpose}). Please review and confirm or reschedule.`,
         apptId
       ]);
     } catch (notifErr) {
@@ -1086,7 +1090,8 @@ router.post('/appointments', async (req: Request, res: Response) => {
       success: true, 
       id: apptId, 
       doctor_id: targetDoctorId,
-      message: 'Appointment booked successfully' 
+      status: apptStatus,
+      message: 'Appointment requested successfully' 
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1100,7 +1105,13 @@ router.patch('/appointments/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status, notes, date, time } = req.body;
 
-    const existing = queryOne(`SELECT id FROM appointments WHERE id = ? AND patient_id = ?`, [id, patientId]);
+    const existing = queryOne(`
+      SELECT a.*, u.name as patient_name
+      FROM appointments a
+      JOIN patients p ON a.patient_id = p.id
+      JOIN users u ON p.user_id = u.id
+      WHERE a.id = ? AND a.patient_id = ?
+    `, [id, patientId]);
     if (!existing) {
       return res.status(404).json({ error: 'Appointment not found' });
     }
@@ -1115,7 +1126,25 @@ router.patch('/appointments/:id', async (req: Request, res: Response) => {
       execute(`UPDATE appointments SET date = ?, time = ? WHERE id = ?`, [date, time, id]);
     }
 
-    return res.json({ success: true, message: 'Appointment updated successfully' });
+    if (status === 'cancelled') {
+      try {
+        execute(`
+          INSERT INTO doctor_notifications (id, doctor_id, patient_id, patient_name, title, message, type, severity, is_read, action_tab, action_id, created_at)
+          VALUES (?, ?, ?, ?, 'Appointment Cancelled by Patient', ?, 'appointment', 'normal', 0, 'appointments', ?, CURRENT_TIMESTAMP)
+        `, [
+          uuidv4(),
+          existing.doctor_id,
+          patientId,
+          existing.patient_name || 'Patient',
+          `${existing.patient_name || 'Patient'} has cancelled the consultation scheduled for ${existing.date} at ${existing.time}.`,
+          id
+        ]);
+      } catch (err) {
+        console.warn('Failed to notify doctor of patient cancellation:', err);
+      }
+    }
+
+    return res.json({ success: true, status, message: 'Appointment updated successfully' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

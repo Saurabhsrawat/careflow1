@@ -26,6 +26,7 @@ import {
   FolderArchive
 } from 'lucide-react';
 import { JourneyEvent, JourneyStage, HealthcareJourney } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface JourneyTimelineProps {
   onStageSelect?: (stage: JourneyStage | string) => void;
@@ -210,22 +211,10 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect,
   const [newNextStep, setNewNextStep] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchJourney = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/journey', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/journey');
       if (res.ok) {
         const data = await res.json();
         setJourney(data.journey || null);
@@ -251,13 +240,11 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect,
     if (!journey) return;
     try {
       setResolving(true);
-      const res = await fetch('/api/patient/journey/resolve', {
+      const res = await authFetch('/api/patient/journey/resolve', {
         method: 'POST',
         headers: {
-          ...getAuthHeaders(),
           'Content-Type': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({
           journey_id: journey.id,
           end_date: resolveEndDate
@@ -279,13 +266,11 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect,
     if (!newJourneyTitle.trim()) return;
     try {
       setStartingJourney(true);
-      const res = await fetch('/api/patient/journeys', {
+      const res = await authFetch('/api/patient/journeys', {
         method: 'POST',
         headers: {
-          ...getAuthHeaders(),
           'Content-Type': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({
           title: newJourneyTitle.trim(),
           category: newJourneyCategory,
@@ -373,10 +358,9 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ onStageSelect,
     if (!newTitle || !newStage) return;
     try {
       setSubmitting(true);
-      const res = await fetch('/api/patient/journey', {
+      const res = await authFetch('/api/patient/journey', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stage: newStage,
           title: newTitle,

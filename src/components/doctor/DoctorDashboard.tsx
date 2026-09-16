@@ -274,7 +274,15 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({ onSelectPatien
                       </td>
 
                       <td className="py-3.5 px-3">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                          appt.status === 'pending'
+                            ? 'bg-amber-100 text-amber-800 border-amber-200'
+                            : appt.status === 'confirmed' || appt.status === 'upcoming'
+                            ? 'bg-blue-100 text-blue-800 border-blue-200'
+                            : appt.status === 'completed'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border-rose-200'
+                        }`}>
                           {appt.status}
                         </span>
                       </td>

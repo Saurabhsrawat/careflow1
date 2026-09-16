@@ -19,6 +19,7 @@ import {
   Droplet
 } from 'lucide-react';
 import { EmergencyCardData } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface EmergencyCardProps {
   onNavigateTab?: (tab: any) => void;
@@ -29,22 +30,10 @@ export const EmergencyCard: React.FC<EmergencyCardProps> = ({ onNavigateTab }) =
   const [cardData, setCardData] = useState<EmergencyCardData | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchEmergencyCard = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/emergency-card', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/emergency-card');
       if (res.ok) {
         const data = await res.json();
         setCardData(data.emergencyCard);

@@ -728,7 +728,7 @@ adminRouter.patch('/appointments/:id/status', async (req: Request, res: Response
       });
     }
 
-    if (status && !['upcoming', 'completed', 'cancelled', 'past'].includes(status)) {
+    if (status && !['pending', 'confirmed', 'upcoming', 'completed', 'cancelled', 'declined', 'past'].includes(status)) {
       return res.status(400).json({ error: 'Invalid appointment status' });
     }
 

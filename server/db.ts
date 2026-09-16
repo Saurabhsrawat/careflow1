@@ -585,6 +585,46 @@ export function ensureExtraTablesAndSeeds(db: Database): void {
       console.warn('Users table migration warning:', migErr);
     }
 
+    // Schema migration: Ensure appointments table check constraint allows all modern appointment status values
+    // ('pending', 'confirmed', 'upcoming', 'completed', 'cancelled', 'declined', 'past')
+    try {
+      const apptSqlRes = db.exec(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'appointments';`);
+      const currentApptSql = apptSqlRes[0]?.values[0]?.[0] as string || '';
+      if (currentApptSql && (!currentApptSql.includes("'pending'") || !currentApptSql.includes("'confirmed'"))) {
+        console.log('Migrating appointments table schema to allow pending, confirmed, declined status values...');
+        db.run('PRAGMA foreign_keys = OFF;');
+        db.run(`
+          CREATE TABLE IF NOT EXISTS appointments_migration_temp (
+            id TEXT PRIMARY KEY,
+            patient_id TEXT NOT NULL,
+            doctor_id TEXT NOT NULL,
+            hospital_id TEXT NOT NULL,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'upcoming' CHECK(status IN ('pending', 'confirmed', 'upcoming', 'completed', 'cancelled', 'declined', 'past')),
+            notes TEXT,
+            related_journey_event_id TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+            FOREIGN KEY (doctor_id) REFERENCES doctors(id),
+            FOREIGN KEY (hospital_id) REFERENCES hospitals(id),
+            FOREIGN KEY (related_journey_event_id) REFERENCES journey_events(id)
+          );
+        `);
+        db.run(`
+          INSERT INTO appointments_migration_temp (id, patient_id, doctor_id, hospital_id, date, time, purpose, status, notes, related_journey_event_id, created_at)
+          SELECT id, patient_id, doctor_id, hospital_id, date, time, purpose, status, notes, related_journey_event_id, created_at FROM appointments;
+        `);
+        db.run(`DROP TABLE appointments;`);
+        db.run(`ALTER TABLE appointments_migration_temp RENAME TO appointments;`);
+        db.run('PRAGMA foreign_keys = ON;');
+        console.log('Appointments table schema migration completed successfully. All existing records preserved.');
+      }
+    } catch (migApptErr) {
+      console.warn('Appointments table migration warning:', migApptErr);
+    }
+
     // Schema migration: Ensure caregiver_links table exists and demo caregiver is seeded
     try {
       db.run(`
@@ -620,6 +660,26 @@ export function ensureExtraTablesAndSeeds(db: Database): void {
         db.run(`
           INSERT INTO caregiver_links (id, caregiver_user_id, patient_id, can_view_journey, can_view_appointments, can_view_tasks, can_view_reports, can_view_daily_health)
           VALUES ('link-maria-alex', 'user-cg-maria', 'pat-alex-rivera', 1, 1, 0, 0, 1);
+        `);
+      }
+
+      // Second Demo Caregiver: Elena Rivera with Full Permissions (demonstrates visible Tasks and Medical Reports)
+      const elenaUserCheck = db.exec(`SELECT count(*) as count FROM users WHERE email = 'elena.caregiver@careflow.org';`);
+      const elenaUserCount = elenaUserCheck[0]?.values[0]?.[0] as number || 0;
+      if (elenaUserCount === 0) {
+        const passwordHash = bcrypt.hashSync('password123', 10);
+        db.run(`
+          INSERT INTO users (id, name, email, password_hash, role, hospital_id) VALUES
+          ('user-cg-elena', 'Elena Rivera', 'elena.caregiver@careflow.org', '${passwordHash}', 'caregiver', NULL);
+        `);
+      }
+
+      const elenaLinkCheck = db.exec(`SELECT count(*) as count FROM caregiver_links WHERE caregiver_user_id = 'user-cg-elena' AND patient_id = 'pat-alex-rivera';`);
+      const elenaLinkCount = elenaLinkCheck[0]?.values[0]?.[0] as number || 0;
+      if (elenaLinkCount === 0) {
+        db.run(`
+          INSERT INTO caregiver_links (id, caregiver_user_id, patient_id, can_view_journey, can_view_appointments, can_view_tasks, can_view_reports, can_view_daily_health)
+          VALUES ('link-elena-alex', 'user-cg-elena', 'pat-alex-rivera', 1, 1, 1, 1, 1);
         `);
       }
     } catch (cgErr) {
@@ -819,7 +879,7 @@ export async function initSchemaAndSeed(db: Database): Promise<void> {
       date TEXT NOT NULL,
       time TEXT NOT NULL,
       purpose TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'upcoming' CHECK(status IN ('upcoming', 'completed', 'cancelled', 'past')),
+      status TEXT NOT NULL DEFAULT 'upcoming' CHECK(status IN ('pending', 'confirmed', 'upcoming', 'completed', 'cancelled', 'declined', 'past')),
       notes TEXT,
       related_journey_event_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

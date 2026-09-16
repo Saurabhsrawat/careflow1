@@ -18,6 +18,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { TimelineEntry } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface PatientTimelineProps {
   onNavigateTab?: (tab: any) => void;
@@ -30,22 +31,10 @@ export const PatientTimeline: React.FC<PatientTimelineProps> = ({ onNavigateTab 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchTimeline = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/timeline', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/timeline');
       if (res.ok) {
         const data = await res.json();
         setTimelineItems(data.timeline || []);

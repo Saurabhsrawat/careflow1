@@ -29,6 +29,7 @@ export const PlaceholderDashboard: React.FC = () => {
   const [dbStatus, setDbStatus] = useState<DatabaseStatus | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const fetchStatus = () => {
     fetch('/api/hospitals/status')
@@ -42,7 +43,6 @@ export const PlaceholderDashboard: React.FC = () => {
   }, []);
 
   const handleResetDb = async () => {
-    if (!window.confirm('Reset SQLite database and re-seed with clean demo data?')) return;
     try {
       setResetting(true);
       setResetMessage(null);
@@ -139,14 +139,36 @@ export const PlaceholderDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleResetDb}
-              disabled={resetting}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin' : ''}`} />
-              <span>{resetting ? 'Resetting DB...' : 'Reset & Re-seed SQLite DB'}</span>
-            </button>
+            {confirmReset ? (
+              <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-1.5 text-xs animate-fadeIn">
+                <span className="font-semibold text-rose-800">Reset DB to seeds?</span>
+                <button
+                  onClick={() => {
+                    setConfirmReset(false);
+                    handleResetDb();
+                  }}
+                  disabled={resetting}
+                  className="px-2.5 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition cursor-pointer disabled:opacity-50"
+                >
+                  Yes, Reset
+                </button>
+                <button
+                  onClick={() => setConfirmReset(false)}
+                  className="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmReset(true)}
+                disabled={resetting}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin' : ''}`} />
+                <span>{resetting ? 'Resetting DB...' : 'Reset & Re-seed SQLite DB'}</span>
+              </button>
+            )}
           </div>
         </div>
 

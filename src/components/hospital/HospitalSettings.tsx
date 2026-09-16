@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { authFetch } from '../../utils/api';
 import { 
   Building2, 
   MapPin, 
@@ -74,11 +75,10 @@ export const HospitalSettings: React.FC<HospitalSettingsProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/hospitals/admin/profile', {
+      const res = await authFetch('/api/hospitals/admin/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           name,

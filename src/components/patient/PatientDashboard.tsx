@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Task, Appointment, JourneyEvent, DailyHealthRecord, MedicalReport } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface PatientDashboardProps {
   onNavigateTab: (tab: any) => void;
@@ -41,13 +42,9 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigateTa
   const fetchDashboard = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('careflow_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
       const [dashRes, corrRes] = await Promise.all([
-        fetch('/api/patient/dashboard', { headers, credentials: 'include' }),
-        fetch('/api/patient/correlation-insights', { headers, credentials: 'include' })
+        authFetch('/api/patient/dashboard'),
+        authFetch('/api/patient/correlation-insights')
       ]);
 
       if (dashRes.ok) {
@@ -78,14 +75,9 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigateTa
   const handleToggleTask = async (task: Task) => {
     const newStatus = task.status === 'completed' ? 'pending' : 'completed';
     try {
-      const token = localStorage.getItem('careflow_token');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      await fetch(`/api/patient/tasks/${task.id}`, {
+      await authFetch(`/api/patient/tasks/${task.id}`, {
         method: 'PATCH',
-        headers,
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
       fetchDashboard();
@@ -560,8 +552,14 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({ onNavigateTa
                 <Calendar className="w-5 h-5 text-blue-600" />
                 <h3 className="font-bold text-slate-900 text-base">Next Consultation</h3>
               </div>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 uppercase">
-                Upcoming
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase ${
+                upcomingAppt?.status === 'pending'
+                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                  : upcomingAppt?.status === 'confirmed'
+                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                  : 'bg-blue-100 text-blue-800'
+              }`}>
+                {upcomingAppt?.status === 'pending' ? 'Pending Review' : upcomingAppt?.status === 'confirmed' ? 'Confirmed' : 'Upcoming'}
               </span>
             </div>
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { HospitalDoctor } from '../../types';
+import { authFetch } from '../../utils/api';
 import { 
   Stethoscope, 
   Search, 
@@ -52,6 +53,7 @@ export const HospitalDoctorsList: React.FC<HospitalDoctorsListProps> = ({
 
   // Edit Doctor Modal state
   const [editingDoctor, setEditingDoctor] = useState<HospitalDoctor | null>(null);
+  const [confirmingDoctorId, setConfirmingDoctorId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
     specialization: '',
@@ -85,11 +87,10 @@ export const HospitalDoctorsList: React.FC<HospitalDoctorsListProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
-      const res = await fetch('/api/hospitals/admin/doctors', {
+      const res = await authFetch('/api/hospitals/admin/doctors', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(addForm)
       });
@@ -118,20 +119,14 @@ export const HospitalDoctorsList: React.FC<HospitalDoctorsListProps> = ({
   // Handle Toggle Doctor Active Status (Soft Delete)
   const handleToggleStatus = async (doctor: HospitalDoctor) => {
     const newStatus = doctor.is_active === 1 ? 0 : 1;
-    const confirmMessage = newStatus === 0 
-      ? `Are you sure you want to deactivate ${doctor.name}? They will no longer be assigned new appointments, but all historical records will be preserved.`
-      : `Reactivate ${doctor.name} for active clinical duties at ${hospitalName}?`;
-
-    if (!window.confirm(confirmMessage)) return;
 
     setActionLoadingId(doctor.id);
     setErrorMsg(null);
     try {
-      const res = await fetch(`/api/hospitals/admin/doctors/${doctor.id}/status`, {
+      const res = await authFetch(`/api/hospitals/admin/doctors/${doctor.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ is_active: newStatus })
       });
@@ -165,11 +160,10 @@ export const HospitalDoctorsList: React.FC<HospitalDoctorsListProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
-      const res = await fetch(`/api/hospitals/admin/doctors/${editingDoctor.id}`, {
+      const res = await authFetch(`/api/hospitals/admin/doctors/${editingDoctor.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(editForm)
       });
@@ -389,29 +383,55 @@ export const HospitalDoctorsList: React.FC<HospitalDoctorsListProps> = ({
                     {isActive ? 'Available for booking' : 'Caseload archived'}
                   </span>
 
-                  <button
-                    onClick={() => handleToggleStatus(doctor)}
-                    disabled={isProcessing}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${
-                      isActive
-                        ? 'text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/60'
-                        : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60'
-                    }`}
-                  >
-                    {isProcessing ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : isActive ? (
-                      <>
-                        <UserX className="w-3.5 h-3.5" />
-                        <span>Deactivate</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="w-3.5 h-3.5" />
-                        <span>Reactivate</span>
-                      </>
-                    )}
-                  </button>
+                  {confirmingDoctorId === doctor.id ? (
+                    <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1 text-xs">
+                      <span className="text-[11px] font-semibold text-slate-700 px-1">
+                        {isActive ? 'Deactivate?' : 'Reactivate?'}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setConfirmingDoctorId(null);
+                          handleToggleStatus(doctor);
+                        }}
+                        disabled={isProcessing}
+                        className={`px-2 py-0.5 text-xs font-bold text-white rounded transition cursor-pointer ${
+                          isActive ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                        }`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setConfirmingDoctorId(null)}
+                        className="px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded transition cursor-pointer"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmingDoctorId(doctor.id)}
+                      disabled={isProcessing}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+                        isActive
+                          ? 'text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/60'
+                          : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60'
+                      }`}
+                    >
+                      {isProcessing ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : isActive ? (
+                        <>
+                          <UserX className="w-3.5 h-3.5" />
+                          <span>Deactivate</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>Reactivate</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             );

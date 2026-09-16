@@ -18,6 +18,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { NotificationItem } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface NotificationsInboxProps {
   onNavigateTab?: (tab: any) => void;
@@ -29,22 +30,10 @@ export const NotificationsInbox: React.FC<NotificationsInboxProps> = ({ onNaviga
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [filterMode, setFilterMode] = useState<'all' | 'unread'>('all');
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/notifications', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/notifications');
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications || []);
@@ -63,10 +52,9 @@ export const NotificationsInbox: React.FC<NotificationsInboxProps> = ({ onNaviga
 
   const handleToggleRead = async (id: string, currentRead: boolean) => {
     try {
-      const res = await fetch(`/api/patient/notifications/${id}/read`, {
+      const res = await authFetch(`/api/patient/notifications/${id}/read`, {
         method: 'PATCH',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_read: !currentRead })
       });
       if (res.ok) {
@@ -80,10 +68,8 @@ export const NotificationsInbox: React.FC<NotificationsInboxProps> = ({ onNaviga
 
   const handleMarkAllRead = async () => {
     try {
-      const res = await fetch('/api/patient/notifications/mark-all-read', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        credentials: 'include',
+      const res = await authFetch('/api/patient/notifications/mark-all-read', {
+        method: 'POST'
       });
       if (res.ok) {
         setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));

@@ -16,6 +16,7 @@ import {
   Eye
 } from 'lucide-react';
 import { AccessEntity } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface AccessRequestsProps {
   onNavigateTab?: (tab: any) => void;
@@ -26,22 +27,10 @@ export const AccessRequests: React.FC<AccessRequestsProps> = ({ onNavigateTab })
   const [entities, setEntities] = useState<AccessEntity[]>([]);
   const [bannerNotice, setBannerNotice] = useState<string>('');
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchAccess = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/access-requests', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/access-requests');
       if (res.ok) {
         const data = await res.json();
         setEntities(data.entities || []);

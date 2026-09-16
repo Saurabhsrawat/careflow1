@@ -21,6 +21,7 @@ import {
   Check
 } from 'lucide-react';
 import { Prescription } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface MedicationsManagerProps {
   onNavigateTab?: (tab: any) => void;
@@ -34,22 +35,10 @@ export const MedicationsManager: React.FC<MedicationsManagerProps> = ({ onNaviga
   const [togglingSlot, setTogglingSlot] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchMedications = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/medications', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/medications');
       if (res.ok) {
         const data = await res.json();
         setPrescriptions(data.prescriptions || []);
@@ -71,10 +60,9 @@ export const MedicationsManager: React.FC<MedicationsManagerProps> = ({ onNaviga
     const nextTaken = currentStatus !== 'taken';
     setTogglingSlot(slot);
     try {
-      const res = await fetch('/api/patient/medications/toggle-dose', {
+      const res = await authFetch('/api/patient/medications/toggle-dose', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: '2026-08-27',
           slot,

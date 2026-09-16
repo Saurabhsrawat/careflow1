@@ -17,6 +17,7 @@ import {
   Info
 } from 'lucide-react';
 import { CaregiverLink } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface CaregiverManagerProps {
   onNavigateTab?: (tab: any) => void;
@@ -40,6 +41,7 @@ export const CaregiverManager: React.FC<CaregiverManagerProps> = () => {
 
   // Editing state
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [confirmUnlinkId, setConfirmUnlinkId] = useState<string | null>(null);
   const [editToggles, setEditToggles] = useState<{
     can_view_journey: boolean;
     can_view_appointments: boolean;
@@ -54,23 +56,11 @@ export const CaregiverManager: React.FC<CaregiverManagerProps> = () => {
     can_view_daily_health: true,
   });
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchCaregivers = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/patient/caregivers', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/caregivers');
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to load linked caregivers');
@@ -98,10 +88,9 @@ export const CaregiverManager: React.FC<CaregiverManagerProps> = () => {
       setError(null);
       setSuccessMsg(null);
 
-      const res = await fetch('/api/patient/caregivers/link', {
+      const res = await authFetch('/api/patient/caregivers/link', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
           can_view_journey: canViewJourney ? 1 : 0,
@@ -142,10 +131,9 @@ export const CaregiverManager: React.FC<CaregiverManagerProps> = () => {
     try {
       setError(null);
       setSuccessMsg(null);
-      const res = await fetch(`/api/patient/caregivers/${linkId}/permissions`, {
+      const res = await authFetch(`/api/patient/caregivers/${linkId}/permissions`, {
         method: 'PATCH',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editToggles),
       });
       const data = await res.json().catch(() => ({}));
@@ -161,15 +149,11 @@ export const CaregiverManager: React.FC<CaregiverManagerProps> = () => {
   };
 
   const handleUnlink = async (linkId: string) => {
-    if (!window.confirm('Are you sure you want to unlink this caregiver? They will immediately lose access to your records.')) return;
-
     try {
       setError(null);
       setSuccessMsg(null);
-      const res = await fetch(`/api/patient/caregivers/${linkId}`, {
+      const res = await authFetch(`/api/patient/caregivers/${linkId}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
-        credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Failed to unlink caregiver');
@@ -431,13 +415,34 @@ export const CaregiverManager: React.FC<CaregiverManagerProps> = () => {
                           >
                             Edit Permissions
                           </button>
-                          <button
-                            onClick={() => handleUnlink(cg.id)}
-                            className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Unlink Caregiver"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {confirmUnlinkId === cg.id ? (
+                            <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 rounded-lg p-1 text-xs">
+                              <span className="text-[11px] font-semibold text-rose-800 px-1">Unlink?</span>
+                              <button
+                                onClick={() => {
+                                  setConfirmUnlinkId(null);
+                                  handleUnlink(cg.id);
+                                }}
+                                className="px-2 py-0.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded transition cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                onClick={() => setConfirmUnlinkId(null)}
+                                className="px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded transition cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmUnlinkId(cg.id)}
+                              className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Unlink Caregiver"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

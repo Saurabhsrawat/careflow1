@@ -35,6 +35,7 @@ import {
   Legend,
   ReferenceLine
 } from 'recharts';
+import { authFetch } from '../../utils/api';
 
 interface HealthAnalyticsProps {
   onNavigateTab?: (tab: 'dashboard' | 'journey' | 'health_recorder' | 'analytics' | 'history' | 'reports' | 'appointments' | 'tasks') => void;
@@ -51,11 +52,7 @@ export const HealthAnalytics: React.FC<HealthAnalyticsProps> = ({ onNavigateTab 
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('careflow_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('/api/patient/correlation-insights', { headers, credentials: 'include' });
+      const res = await authFetch('/api/patient/correlation-insights');
       if (res.ok) {
         const ct = res.headers.get('content-type');
         if (ct && ct.includes('application/json')) {

@@ -19,6 +19,7 @@ import {
   FileText
 } from 'lucide-react';
 import { HealthSummarySynthesis } from '../../types';
+import { authFetch } from '../../utils/api';
 
 interface AiHealthSummaryProps {
   onNavigateTab?: (tab: any) => void;
@@ -28,22 +29,10 @@ export const AiHealthSummary: React.FC<AiHealthSummaryProps> = ({ onNavigateTab 
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<HealthSummarySynthesis | null>(null);
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    const token = localStorage.getItem('careflow_token');
-    const headers: Record<string, string> = { ...extra };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
   const fetchSummary = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/patient/ai-summary', {
-        headers: getAuthHeaders(),
-        credentials: 'include',
-      });
+      const res = await authFetch('/api/patient/ai-summary');
       if (res.ok) {
         const data = await res.json();
         setSummary(data.summary);
